@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-Core Python code lives in `src/markovsound/`. The main loop is in `loop.py`; focused modules such as `markov.py`, `lyrics_markov.py`, `codes_markov.py`, and `ace_client.py` hold generation and backend logic. Root wrappers (`create`, `play`, `absorb`, `keep`, `steer`, `verwijder`) provide the operator interface. Utility scripts live in `scripts/`.
+Core Python code lives in `src/markovsound/`. The main loop is in `loop.py`; focused modules such as `markov.py`, `lyrics_markov.py`, `codes_markov.py`, and `ace_client.py` hold generation and backend logic. Root wrappers (`create`, `play`, `absorb`, `keep`, `steer`, `verwijder`) provide the operator interface. Operator-facing Python CLIs live in `src/markovsound/` and are also exposed as installable `markovsound-*` console scripts. `scripts/` is reserved for thin compatibility wrappers, smoke tests, and non-Python helpers.
 
 `Audio/` contains tracks, metadata sidecars, reference material in `Audio/absorb/`, and smoke-test outputs. `state/` contains mutable runtime data such as pickle chains, corpora, and steering settings. Treat both directories as working data, not source code. Project notes live in `USER_GUIDE.md`, `CLAUDE.md`, and `MARKOVART_REFERENCE.md`.
 

@@ -107,7 +107,7 @@ MarkovSound/
   pyproject.toml
   prompts/             # describe_audio.txt, listening_stance.md
   src/markovsound/     # Python package (core logic)
-  scripts/             # CLI utilities
+  scripts/             # wrappers, smoke tests, and non-Python helpers
   state/               # runtime state (chain, identity, memory, …)
     markov_chain.pkl
     prompt_corpus.txt

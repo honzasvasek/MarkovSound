@@ -7,11 +7,12 @@ so the chain learns when to break lines and switch sections.
 """
 from __future__ import annotations
 
-import pickle
 import random
 import re
 from collections import defaultdict
 from pathlib import Path
+
+from .chain_io import load_chain_payload, save_chain_payload
 
 
 START = "__START__"
@@ -274,15 +275,11 @@ def untrain_lyrics(chain: dict, text: str, order: int) -> int:
     return removed
 
 def save_lyrics_chain(chain: dict, order: int, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as h:
-        pickle.dump({"chain": {k: dict(v) for k, v in chain.items()}, "order": order}, h)
+    save_chain_payload(chain, order, path)
 
 
 def load_lyrics_chain(path: Path) -> tuple[dict, int]:
-    with path.open("rb") as h:
-        d = pickle.load(h)
-    return d["chain"], d["order"]
+    return load_chain_payload(path)
 
 
 def chain_stats(chain: dict) -> dict:

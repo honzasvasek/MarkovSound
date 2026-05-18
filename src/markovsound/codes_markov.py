@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import pickle
 import random
 from collections import defaultdict
 from pathlib import Path
+
+from .chain_io import load_chain_payload, save_chain_payload
 
 
 def parse_codes(codes_str: str) -> list[int]:
@@ -61,7 +62,7 @@ def sample_codes(
     length: int,
     temperature: float = 1.0,
     max_dead_ends: int = 50,
-) -> list[int]:
+) -> tuple[list[int], int]:
     """Sample `length` codes from the chain. On a dead-end, jump to a random
     known context — that's the crossover point where one absorbed track's
     trajectory hops onto another's."""
@@ -95,15 +96,11 @@ def sample_codes(
 
 
 def save_codes_chain(chain: dict, order: int, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("wb") as handle:
-        pickle.dump({"chain": {k: dict(v) for k, v in chain.items()}, "order": order}, handle)
+    save_chain_payload(chain, order, path)
 
 
 def load_codes_chain(path: Path) -> tuple[dict, int]:
-    with path.open("rb") as handle:
-        data = pickle.load(handle)
-    return data["chain"], data["order"]
+    return load_chain_payload(path)
 
 
 def chain_stats(chain: dict) -> dict:

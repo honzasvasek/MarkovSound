@@ -33,7 +33,7 @@ MarkovArt/
   pyproject.toml      # installable Python package config
   prompts/            # describe_image.txt, viewpoint.md
   src/markovart/      # Python package (core logic)
-  scripts/            # CLI utilities (fetch_image.py, words.sh, …)
+  scripts/            # wrappers, smoke tests, and non-Python helpers
   state/              # runtime state (chain, identity, memory, …)
   Images/             # generated images + absorb/
   website/            # live viewer (crossfade + chat panel)

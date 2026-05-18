@@ -9,6 +9,20 @@ description = "Generative music system combining Markov chain text generation wi
 requires-python = ">=3.11"
 dependencies = ["requests>=2.28"]
 
+[project.scripts]
+markovsound = "markovsound.loop:main"
+markovsound-absorb = "markovsound.cli_absorb:main"
+markovsound-dedup = "markovsound.cli_dedup:main"
+markovsound-keep = "markovsound.cli_keep:main"
+markovsound-lyricist = "markovsound.lyricist:main"
+markovsound-prune-timestamps = "markovsound.cli_prune_timestamps:main"
+markovsound-seed-lyrics = "markovsound.cli_seed_lyrics:main"
+markovsound-seed-vocal-tags = "markovsound.cli_seed_vocal_tags:main"
+markovsound-steer = "markovsound.cli_steer:main"
+markovsound-transcribe = "markovsound.cli_transcribe:main"
+markovsound-understand = "markovsound.cli_understand:main"
+markovsound-verwijder = "markovsound.cli_remove:main"
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 
