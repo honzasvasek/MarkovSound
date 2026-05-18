@@ -1,0 +1,6 @@
+#!/bin/bash
+# main generation loop
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m markovsound.loop "$@"

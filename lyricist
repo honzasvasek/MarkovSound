@@ -1,0 +1,10 @@
+#!/bin/bash
+# Generate ACE-Step lyrics via Ollama (default gemma4:latest).
+#
+# Usage:
+#   ./lyricist "deep house with rolling bassline" -d 180 -b 124
+#   ./lyricist "klezmer balkan with accordion" --description "wedding scene"
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m markovsound.lyricist "$@"

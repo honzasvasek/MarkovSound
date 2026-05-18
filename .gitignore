@@ -1,0 +1,13 @@
+# Local/editor state
+.claude/
+.venv*/
+__pycache__/
+*.py[cod]
+
+# Runtime/generated data
+Audio/
+Music/
+state/
+snapshots/
+tmp.mp3
+cover.jpg

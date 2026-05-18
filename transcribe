@@ -1,0 +1,23 @@
+#!/bin/bash
+# Transcribe audio with ACE-Step transcriber via vLLM.
+#
+# One-time vLLM setup (needs ~13 GB VRAM):
+#   pip install vllm
+#   vllm serve Civitai/acestep-transcriber-FP8 \
+#       --host 0.0.0.0 --port 8000 \
+#       --max-model-len 32768 --gpu-memory-utilization 0.9 \
+#       --trust-remote-code
+#
+# Usage:
+#   ./transcribe Audio/03.mp3
+#   ./transcribe Audio/keeps/*.mp3
+#   ./transcribe --jsonl out.jsonl --artist X --title Y file.mp3
+#   ./transcribe --no-save --json one.mp3
+#
+# Env: TRANSCRIBER_URL (default http://127.0.0.1:8000),
+#      TRANSCRIBER_MODEL (default Civitai/acestep-transcriber-FP8),
+#      TRANSCRIBER_AUDIO_FIELD (input_audio | audio_url; default input_audio).
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m markovsound.cli_transcribe "$@"

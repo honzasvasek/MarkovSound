@@ -1,0 +1,11 @@
+#!/bin/bash
+# Run /understand on one or more audio files. Prints lyrics + metadata and
+# (by default) appends each result to state/understood_lyrics.txt.
+#
+#   ./understand Audio/03.mp3
+#   ./understand Audio/keeps/*.mp3
+#   ./understand --no-save --json some.mp3
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m markovsound.cli_understand "$@"

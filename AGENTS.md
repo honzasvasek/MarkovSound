@@ -1,0 +1,36 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+
+Core Python code lives in `src/markovsound/`. The main loop is in `loop.py`; focused modules such as `markov.py`, `lyrics_markov.py`, `codes_markov.py`, and `ace_client.py` hold generation and backend logic. Root wrappers (`create`, `play`, `absorb`, `keep`, `steer`, `verwijder`) provide the operator interface. Utility scripts live in `scripts/`.
+
+`Audio/` contains tracks, metadata sidecars, reference material in `Audio/absorb/`, and smoke-test outputs. `state/` contains mutable runtime data such as pickle chains, corpora, and steering settings. Treat both directories as working data, not source code. Project notes live in `USER_GUIDE.md`, `CLAUDE.md`, and `MARKOVART_REFERENCE.md`.
+
+## Build, Test, and Development Commands
+
+- `python3 -m pip install -e .` — install the package in editable mode.
+- `./create` — run the live generation loop through `markovsound.loop`.
+- `./play` — listen to the newest slot track and use `INS`/`DEL` curation controls.
+- `./absorb Audio/absorb` — analyze reference audio and train the chains.
+- `./steer "prepared piano drones"` — bias the text chain toward a target style.
+- `PYTHONPATH=src python3 -m markovsound.cli_dedup` — flatten chain weights when output becomes repetitive.
+- `python3 scripts/smoke_ace.py` — exercise ACE-Step generation end to end.
+- `python3 scripts/smoke_vocals.py` — run a vocal-generation smoke test against a live server.
+
+ACE-Step is external; local generation assumes a reachable `ace-server` and model files as described in `CLAUDE.md`.
+
+## Coding Style & Naming Conventions
+
+Use Python 3.11+, four-space indentation, type hints where practical, and `snake_case` for modules, functions, and variables. Existing files prefer small single-purpose modules, `argparse` CLIs, `pathlib.Path`, and `from __future__ import annotations`; follow those patterns. Shell wrappers should stay minimal and delegate real logic to package modules.
+
+## Testing Guidelines
+
+There is no formal unit-test framework, coverage target, or CI configuration. Validate behavior with smoke scripts and, for loop changes, a short `./create` run plus inspection of generated `.mp3`/`.json` pairs. If adding automated tests, place them under `tests/` and name files `test_*.py`.
+
+## Commit & Pull Request Guidelines
+
+This checkout does not include Git history, so no repository-specific commit convention can be inferred. Use concise imperative commits such as `Add lyric chain deduplication`. Pull requests should explain the behavioral change, list manual verification performed, call out any `state/` migration implications, and include sample output or logs when audio-generation behavior changes.
+
+## Runtime Data Safety
+
+Avoid committing incidental updates from `Audio/` or `state/` unless they are intentional fixtures or seed data. Retraining, deletion, and deduplication alter future output; document those effects clearly.

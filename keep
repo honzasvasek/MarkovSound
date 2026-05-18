@@ -1,0 +1,6 @@
+#!/bin/bash
+# boost a track's captions in the chain (human-feedback yes-vote)
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m markovsound.cli_keep "$@"
