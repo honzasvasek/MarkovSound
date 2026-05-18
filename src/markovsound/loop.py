@@ -38,7 +38,13 @@ _LYRICS_ORDER = 3
 
 _DEFAULT_ORDER = 3
 _DEFAULT_DURATION = 0  # 0 = random duration each cycle
-_SLOT_COUNT = 10
+
+
+def log(msg: str) -> None:
+    """Emit one timestamped loop status line and flush immediately."""
+    timestamp = time.strftime("%H:%M:%S")
+    sys.stdout.write(f"[{timestamp}] {msg}\n")
+    sys.stdout.flush()
 
 
 def _random_duration_seconds(cfg: RuntimeConfig) -> int:
