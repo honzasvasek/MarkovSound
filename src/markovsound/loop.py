@@ -1,3 +1,4 @@
+"""Top-level loop orchestration: lifecycle, signals, live config reloads, and cycle scheduling."""
 from __future__ import annotations
 
 import argparse

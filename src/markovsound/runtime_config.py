@@ -1,3 +1,4 @@
+"""Validated live settings reloaded by the loop between cycles."""
 from __future__ import annotations
 
 import json

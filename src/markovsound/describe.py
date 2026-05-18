@@ -1,3 +1,4 @@
+"""Caption extraction and pop-style rejection heuristics for feedback training."""
 from __future__ import annotations
 
 import re

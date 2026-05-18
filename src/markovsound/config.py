@@ -1,3 +1,4 @@
+"""Filesystem layout and ACE server configuration discovery."""
 from __future__ import annotations
 
 import os

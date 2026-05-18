@@ -1,3 +1,4 @@
+"""Low-level client for ACE-Step server lifecycle and job endpoints."""
 from __future__ import annotations
 
 import json

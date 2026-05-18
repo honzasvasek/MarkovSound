@@ -1,3 +1,4 @@
+"""Append-only lyric audit corpora for requested and heard lyrics."""
 from __future__ import annotations
 
 import time

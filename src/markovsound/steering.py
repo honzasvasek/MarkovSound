@@ -1,3 +1,4 @@
+"""Persistent steering allow-list helpers used by caption filtering."""
 from __future__ import annotations
 
 import json

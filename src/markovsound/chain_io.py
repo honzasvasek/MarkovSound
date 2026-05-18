@@ -1,3 +1,4 @@
+"""Shared persistence helpers for the project's Markov-style chains."""
 from __future__ import annotations
 
 import pickle

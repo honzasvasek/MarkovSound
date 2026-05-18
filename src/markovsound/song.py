@@ -1,3 +1,4 @@
+"""Song-level prompt shaping and per-take musical scaffold helpers."""
 from __future__ import annotations
 
 import random

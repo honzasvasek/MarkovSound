@@ -1,3 +1,4 @@
+"""Markov-chain utilities for ACE audio-code sequences."""
 from __future__ import annotations
 
 import random

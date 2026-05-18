@@ -1,3 +1,4 @@
+"""Text-caption Markov-chain construction, sampling, and feedback updates."""
 from __future__ import annotations
 
 import random

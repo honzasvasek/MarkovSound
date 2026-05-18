@@ -1,3 +1,4 @@
+"""Coordination helpers between generation and the interactive player."""
 from __future__ import annotations
 
 import json

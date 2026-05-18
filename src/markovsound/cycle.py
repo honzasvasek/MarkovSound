@@ -1,3 +1,4 @@
+"""One generation cycle split into planning, lyrics, synthesis, output, and feedback phases."""
 from __future__ import annotations
 
 import json
@@ -300,6 +301,116 @@ def train_generated(
             log(f"replaced created lyrics in chain (-{removed} raw, +{added} /lm-formatted)")
 
 
+
+@dataclass
+class TranscriptionResult:
+    lyrics: str = ""
+    language: str = ""
+
+
+def _understand_track(*, ace_cfg: AceConfig, mp3_path: Path, sidecar: dict, log: Callable[[str], None]) -> tuple[dict, str | None]:
+    """Run ACE understand and record the machine-readable observation block."""
+    t0 = time.time()
+    meta, _latent = ace_client.understand(ace_cfg, mp3_path, log=log)
+    sidecar["understand_seconds"] = round(time.time() - t0, 2)
+    sidecar["understand_meta"] = {
+        key: meta.get(key)
+        for key in ("caption", "bpm", "keyscale", "timesignature", "vocal_language", "duration")
+    }
+    return meta, metadata_caption(meta)
+
+
+def _train_understood_codes(*, meta: dict, codes_chain: dict, codes_order: int, log: Callable[[str], None]) -> None:
+    """Teach the codes chain from what ACE heard, independent of text feedback."""
+    seq = parse_codes(meta.get("audio_codes") or "")
+    if seq:
+        added = train_codes(codes_chain, seq, codes_order)
+        log(f"trained codes chain (+{added} from /understand; len={len(seq)})")
+
+
+def _transcribe_track(*, mp3_path: Path, sidecar: dict, log: Callable[[str], None]) -> TranscriptionResult:
+    """Prefer the richer external transcriber, but degrade cleanly when unavailable."""
+    try:
+        if not cli_transcribe.server_alive(cli_transcribe.DEFAULT_BASE_URL):
+            return TranscriptionResult()
+        t0 = time.time()
+        result = cli_transcribe.transcribe_one(
+            cli_transcribe.DEFAULT_BASE_URL,
+            cli_transcribe.DEFAULT_MODEL,
+            mp3_path,
+        )
+        raw = (result["parsed"].get("lyrics") or "").strip()
+        language = (result["parsed"].get("languages") or "").strip()
+        sidecar["transcriber_lang"] = language
+        sidecar["transcriber_seconds"] = round(time.time() - t0, 2)
+        if result.get("runaway"):
+            # Some transcriber failures look like long, plausible text. Keep
+            # them for inspection, but never train/carry them forward.
+            sidecar["transcriber_lyrics_raw"] = raw
+            sidecar["transcriber_runaway"] = result.get("runaway_reason")
+            log(f"transcriber: REJECTED ({result.get('runaway_reason')})")
+            return TranscriptionResult(language=language)
+        sidecar["transcriber_lyrics"] = raw
+        log(f"transcriber: {len(raw)} chars, lang={language!r}")
+        return TranscriptionResult(raw, language)
+    except Exception as exc:  # noqa: BLE001
+        log(f"transcriber failed (continuing with /understand lyrics): {exc!r}")
+        return TranscriptionResult()
+
+
+def _train_heard_lyrics(
+    *, plan: SongPlan, meta: dict, transcription: TranscriptionResult,
+    lyrics_chain: dict, lyrics_order: int, log: Callable[[str], None],
+) -> str:
+    """Choose the best heard lyrics source and feed it into the lyrics chain."""
+    heard = transcription.lyrics or (meta.get("lyrics") or "")
+    if plan.vocal_mode and heard and heard.strip() != "[Instrumental]":
+        added = train_lyrics(lyrics_chain, heard, lyrics_order)
+        source = "transcriber" if transcription.lyrics else "/understand"
+        log(f"trained lyrics chain (+{added} from {source})")
+    return heard
+
+
+def _store_take_carryover(*, song_state: dict | None, meta: dict, transcription: TranscriptionResult) -> None:
+    """Persist material the next cover take should inherit from this take."""
+    if song_state is not None and song_state.get("takes_left", 0) > 0:
+        song_state["last_transcribed_lyrics"] = transcription.lyrics or (meta.get("lyrics") or "")
+        song_state["last_audio_codes"] = meta.get("audio_codes") or ""
+
+
+def _append_feedback_corpus(
+    *, paths: Paths, cycle: int, mp3_path: Path, meta: dict, heard_lyrics: str,
+    transcription: TranscriptionResult, plan: SongPlan, result: SynthesisResult,
+) -> None:
+    """Write the exact lyrics source used for feedback into the audit corpus."""
+    corpus_meta = dict(meta)
+    corpus_meta["lyrics"] = heard_lyrics
+    if transcription.language:
+        corpus_meta["vocal_language"] = transcription.language
+    append_understood_lyrics(
+        paths,
+        cycle=cycle,
+        mp3_name=mp3_path.name,
+        meta=corpus_meta,
+        duration=result.enriched.get("duration"),
+        vocal_mode=plan.vocal_mode,
+        lyrics_source=f"transcriber+{result.lyrics_source}" if transcription.lyrics else result.lyrics_source,
+    )
+
+
+def _train_understood_caption(
+    *, trained_caption: str | None, chain: dict, order: int, paths: Paths,
+    sidecar: dict, log: Callable[[str], None],
+) -> None:
+    """Train the text chain only when understand returned a usable caption."""
+    if not trained_caption:
+        log("understand returned no usable caption; skipping text train")
+        return
+    added = train_text(chain, trained_caption, order)
+    save_chain(chain, order, paths.chain_path)
+    sidecar["trained_caption"] = trained_caption
+    log(f"trained text chain (+{added}): {trained_caption[:160]}{'...' if len(trained_caption) > 160 else ''}")
+
 def apply_feedback(
     *, ace_cfg: AceConfig, mp3_path: Path, json_path: Path, sidecar: dict,
     chain: dict, order: int, codes_chain: dict, codes_order: int,
@@ -307,45 +418,23 @@ def apply_feedback(
     plan: SongPlan, result: SynthesisResult, song_state: dict | None,
     log: Callable[[str], None],
 ) -> None:
-    t0 = time.time()
-    meta, _latent = ace_client.understand(ace_cfg, mp3_path, log=log)
-    sidecar["understand_seconds"] = round(time.time() - t0, 2)
-    sidecar["understand_meta"] = {k: meta.get(k) for k in ("caption", "bpm", "keyscale", "timesignature", "vocal_language", "duration")}
-    trained = metadata_caption(meta)
-    seq = parse_codes(meta.get("audio_codes") or "")
-    if seq:
-        added = train_codes(codes_chain, seq, codes_order)
-        log(f"trained codes chain (+{added} from /understand; len={len(seq)})")
-    transcriber_lyrics = ""; transcriber_lang = ""
-    try:
-        if cli_transcribe.server_alive(cli_transcribe.DEFAULT_BASE_URL):
-            tt = time.time(); tr = cli_transcribe.transcribe_one(cli_transcribe.DEFAULT_BASE_URL, cli_transcribe.DEFAULT_MODEL, mp3_path)
-            raw = (tr["parsed"].get("lyrics") or "").strip(); transcriber_lang = (tr["parsed"].get("languages") or "").strip()
-            sidecar["transcriber_lang"] = transcriber_lang; sidecar["transcriber_seconds"] = round(time.time() - tt, 2)
-            if tr.get("runaway"):
-                sidecar["transcriber_lyrics_raw"] = raw; sidecar["transcriber_runaway"] = tr.get("runaway_reason")
-                log(f"transcriber: REJECTED ({tr.get('runaway_reason')})")
-            else:
-                transcriber_lyrics = raw; sidecar["transcriber_lyrics"] = transcriber_lyrics
-                log(f"transcriber: {len(transcriber_lyrics)} chars, lang={transcriber_lang!r}")
-    except Exception as exc:  # noqa: BLE001
-        log(f"transcriber failed (continuing with /understand lyrics): {exc!r}")
-    if song_state is not None and song_state.get("takes_left", 0) > 0:
-        song_state["last_transcribed_lyrics"] = transcriber_lyrics or (meta.get("lyrics") or "")
-        song_state["last_audio_codes"] = meta.get("audio_codes") or ""
-    heard = transcriber_lyrics or (meta.get("lyrics") or "")
-    if plan.vocal_mode and heard and heard.strip() != "[Instrumental]":
-        added = train_lyrics(lyrics_chain, heard, lyrics_order)
-        log(f"trained lyrics chain (+{added} from {'transcriber' if transcriber_lyrics else '/understand'})")
-    corpus_meta = dict(meta); corpus_meta["lyrics"] = heard
-    if transcriber_lang: corpus_meta["vocal_language"] = transcriber_lang
-    append_understood_lyrics(paths, cycle=cycle, mp3_name=mp3_path.name, meta=corpus_meta,
-                             duration=result.enriched.get("duration"), vocal_mode=plan.vocal_mode,
-                             lyrics_source=f"transcriber+{result.lyrics_source}" if transcriber_lyrics else result.lyrics_source)
-    if not trained:
-        log("understand returned no usable caption; skipping text train")
-    else:
-        added = train_text(chain, trained, order); save_chain(chain, order, paths.chain_path)
-        sidecar["trained_caption"] = trained
-        log(f"trained text chain (+{added}): {trained[:160]}{'...' if len(trained) > 160 else ''}")
+    """Observe the generated track, learn from it, and persist feedback metadata."""
+    meta, trained_caption = _understand_track(
+        ace_cfg=ace_cfg, mp3_path=mp3_path, sidecar=sidecar, log=log,
+    )
+    _train_understood_codes(meta=meta, codes_chain=codes_chain, codes_order=codes_order, log=log)
+    transcription = _transcribe_track(mp3_path=mp3_path, sidecar=sidecar, log=log)
+    _store_take_carryover(song_state=song_state, meta=meta, transcription=transcription)
+    heard_lyrics = _train_heard_lyrics(
+        plan=plan, meta=meta, transcription=transcription,
+        lyrics_chain=lyrics_chain, lyrics_order=lyrics_order, log=log,
+    )
+    _append_feedback_corpus(
+        paths=paths, cycle=cycle, mp3_path=mp3_path, meta=meta,
+        heard_lyrics=heard_lyrics, transcription=transcription, plan=plan, result=result,
+    )
+    _train_understood_caption(
+        trained_caption=trained_caption, chain=chain, order=order,
+        paths=paths, sidecar=sidecar, log=log,
+    )
     json_path.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n")
