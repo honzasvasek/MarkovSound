@@ -1,7 +1,7 @@
 #!/bin/bash
-# Play the most recently written slot track, then jump to whatever is newest
-# when it ends. The rotating slot pool (01..10.mp3) means "newest" is by mtime,
-# not by number.
+# Play queued tracks in FIFO order. ./create fills Audio/queue/; the current
+# now-playing item is excluded from the buffer count so generation can start
+# composing the next song while this one is heard.
 #
 # Key bindings during playback (via scripts/play_keys.lua):
 #   INS  → ./keep <track>        (boost caption, keep playing)
@@ -9,38 +9,35 @@
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 audio_dir="$here/Audio"
+queue_dir="$audio_dir/queue"
+archive_dir="$audio_dir/archive"
 state_dir="$here/state"
 now_playing="$state_dir/now_playing.json"
-# Per-playback temp copy of the slot mp3. ./create rotates slot files and
-# may overwrite the file we're playing mid-track; mpv then either glitches
-# or crashes. Copying first means the running playback is decoupled from
-# disk activity.
-play_temp_dir="$state_dir/now_playing.d"
 export MARKOVSOUND_ROOT="$here"
 
-mkdir -p "$state_dir" "$play_temp_dir"
+mkdir -p "$queue_dir" "$archive_dir" "$state_dir"
 
 cleanup() {
     rm -f "$now_playing"
-    rm -rf "$play_temp_dir"
     echo; echo "stopped."; exit 0;
 }
 trap cleanup INT TERM
 
-last_played=""
+next_queued() {
+    find "$queue_dir" -maxdepth 1 -type f -name '*.mp3' | sort | head -n 1
+}
+
 while true; do
-    # Newest 01..10.mp3 by modification time.
-    latest="$(ls -1t "$audio_dir"/[0-9][0-9].mp3 2>/dev/null | head -n 1 || true)"
-    if [ -z "$latest" ]; then
-        echo "no tracks in $audio_dir yet; waiting..."
+    current="$(next_queued || true)"
+    if [ -z "$current" ]; then
+        echo "queue empty; waiting..."
         sleep 5
         continue
     fi
-    name="$(basename "$latest")"
-    if [ "$latest" != "$last_played" ]; then
-        sidecar="${latest%.mp3}.json"
-        if [ -f "$sidecar" ]; then
-            cap="$(python3 -c "
+    name="$(basename "$current")"
+    sidecar="${current%.mp3}.json"
+    [ -f "$sidecar" ] || { sleep 1; continue; }
+    cap="$(python3 -c "
 import json, sys
 d = json.load(open(sys.argv[1]))
 dur = d.get('duration', 0)
@@ -56,49 +53,27 @@ if lyr and lyr != '[Instrumental]':
     for line in lyr.splitlines():
         print(f'  {line}')
 " "$sidecar" 2>/dev/null || true)"
-            echo "▶ $name"
-            echo "$cap"
-        else
-            echo "▶ $name"
-        fi
-    else
-        echo "↻ $name (no newer slot yet)"
-    fi
-    last_played="$latest"
-    # Snapshot the mp3 to our private temp dir BEFORE we hand it to mpv.
-    # cp first to a .partial file then mv into place so mpv never opens a
-    # half-written file. If anything fails, fall back to playing the
-    # original (back to the racy behaviour, but better than not playing).
-    temp_mp3="$play_temp_dir/$name"
-    if cp -f "$latest" "$temp_mp3.partial" 2>/dev/null && mv -f "$temp_mp3.partial" "$temp_mp3" 2>/dev/null; then
-        playback_path="$temp_mp3"
-    else
-        playback_path="$latest"
-    fi
-    # Publish "now playing" state so ./create can sync its generation rate
-    # to the player. File is removed on exit (cleanup trap) and rewritten
-    # atomically per track.
+    echo "▶ $name"
+    echo "$cap"
     python3 -c "
 import json, os, sys, time
-sidecar = sys.argv[1]
-now_playing = sys.argv[2]
-filename = sys.argv[3]
+sidecar, now_playing, filename = sys.argv[1:]
 try:
-    d = json.load(open(sidecar))
-    duration = float(d.get('duration') or 0)
+    d = json.load(open(sidecar)); duration = float(d.get('duration') or 0)
 except Exception:
     duration = 0
 data = {'file': filename, 'started_at': time.time(), 'duration': duration}
 tmp = now_playing + '.tmp'
-with open(tmp, 'w') as f:
-    json.dump(data, f)
+with open(tmp, 'w') as f: json.dump(data, f)
 os.replace(tmp, now_playing)
 " "$sidecar" "$now_playing" "$name" 2>/dev/null || true
-    # Tell the lua keybinding script which slot file this temp copy came
-    # from so keep/verwijder act on the real slot, not the temp.
-    export MARKOVSOUND_ORIGINAL_PATH="$latest"
+    export MARKOVSOUND_ORIGINAL_PATH="$current"
     mpv --no-video --really-quiet \
         --script="$here/scripts/play_keys.lua" \
         --term-status-msg='  ${time-pos} / ${duration}  [INS=keep DEL=verwijder]' \
-        "$playback_path" || true
+        "$current" || true
+    if [ -f "$current" ]; then
+        mv "$current" "$archive_dir/$name"
+        [ -f "$sidecar" ] && mv "$sidecar" "$archive_dir/${name%.mp3}.json"
+    fi
 done

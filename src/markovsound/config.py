@@ -12,6 +12,9 @@ class Paths:
     state_dir: Path
     audio_dir: Path
     absorb_dir: Path
+    queue_dir: Path
+    staging_dir: Path
+    archive_dir: Path
     prompts_dir: Path
     chain_path: Path
     cycle_path: Path
@@ -35,6 +38,9 @@ class Paths:
             state_dir=state,
             audio_dir=audio,
             absorb_dir=audio / "absorb",
+            queue_dir=audio / "queue",
+            staging_dir=audio / "staging",
+            archive_dir=audio / "archive",
             prompts_dir=prompts,
             chain_path=state / "markov_chain.pkl",
             cycle_path=state / "cycle.txt",

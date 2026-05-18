@@ -4,13 +4,13 @@
 
 Core Python code lives in `src/markovsound/`. The main loop is in `loop.py`; focused modules such as `cycle.py`, `markov.py`, `lyrics_markov.py`, `codes_markov.py`, and `ace_client.py` hold generation and backend logic. Root wrappers (`create`, `play`, `absorb`, `keep`, `steer`, `verwijder`) provide the operator interface. Operator-facing Python CLIs live in `src/markovsound/` and are also exposed as installable `markovsound-*` console scripts. `scripts/` is reserved for thin compatibility wrappers, smoke tests, and non-Python helpers.
 
-`Audio/` contains tracks, metadata sidecars, reference material in `Audio/absorb/`, and smoke-test outputs. `state/` contains mutable runtime data such as pickle chains, corpora, steering settings, and live `runtime.json` loop settings. Treat both directories as working data, not source code. Project notes live in `USER_GUIDE.md`, `CLAUDE.md`, and `MARKOVART_REFERENCE.md`.
+`Audio/` contains queued tracks in `Audio/queue/`, in-progress generation outputs in `Audio/staging/`, archived tracks, metadata sidecars, reference material in `Audio/absorb/`, and smoke-test outputs. `state/` contains mutable runtime data such as pickle chains, corpora, steering settings, and live `runtime.json` loop settings. Treat both directories as working data, not source code. Project notes live in `USER_GUIDE.md`, `CLAUDE.md`, and `MARKOVART_REFERENCE.md`.
 
 ## Build, Test, and Development Commands
 
 - `python3 -m pip install -e .` — install the package in editable mode.
 - `./create` — run the live generation loop through `markovsound.loop`.
-- `./play` — listen to the newest slot track and use `INS`/`DEL` curation controls.
+- `./play` — listen to queued tracks and use `INS`/`DEL` curation controls.
 - `./absorb Audio/absorb` — analyze reference audio and train the chains.
 - `./steer "prepared piano drones"` — bias the text chain toward a target style.
 - `PYTHONPATH=src python3 -m markovsound.cli_dedup` — flatten chain weights when output becomes repetitive.

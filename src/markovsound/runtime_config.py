@@ -15,6 +15,7 @@ class RuntimeConfig:
     vocal_prob: float = 0.5
     takes_per_song: int = 3
     cover_strength: float = 0.6
+    target_buffer_tracks: int = 1
 
     def duration_minutes(self) -> list[int]:
         return list(range(self.min_duration_minutes, self.max_duration_minutes + 1))
@@ -29,6 +30,7 @@ def _coerce(data: dict) -> RuntimeConfig:
         vocal_prob=float(data.get("vocal_prob", 0.5)),
         takes_per_song=int(data.get("takes_per_song", 3)),
         cover_strength=float(data.get("cover_strength", 0.6)),
+        target_buffer_tracks=int(data.get("target_buffer_tracks", 1)),
     )
     if cfg.min_duration_minutes < 1:
         raise ValueError("min_duration_minutes must be >= 1")
@@ -44,6 +46,8 @@ def _coerce(data: dict) -> RuntimeConfig:
         raise ValueError("takes_per_song must be >= 1")
     if not 0.0 <= cfg.cover_strength <= 1.0:
         raise ValueError("cover_strength must be between 0.0 and 1.0")
+    if cfg.target_buffer_tracks < 1:
+        raise ValueError("target_buffer_tracks must be >= 1")
     return cfg
 
 

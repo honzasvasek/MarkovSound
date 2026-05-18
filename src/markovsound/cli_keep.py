@@ -57,8 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     keeps_dir.mkdir(parents=True, exist_ok=True)
 
     cycle = data.get("cycle", 0)
-    slot = data.get("slot", 0)
-    archive_name = f"{cycle:04d}_{slot:02d}"
+    archive_name = track.stem if track.stem.isdigit() else f"{cycle:04d}"
 
     archive_mp3 = keeps_dir / f"{archive_name}.mp3"
     archive_json = keeps_dir / f"{archive_name}.json"

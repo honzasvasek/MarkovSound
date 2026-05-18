@@ -20,11 +20,12 @@ from .cycle import (
     apply_feedback,
     plan_song,
     prepare_lyrics,
+    publish_output,
     synthesize,
     train_generated,
     write_output,
 )
-from .playback import wait_for_player
+from .playback import wait_for_buffer_space
 from .runtime_config import RuntimeConfig, load_runtime_config
 
 
@@ -45,16 +46,6 @@ def _random_duration_seconds(cfg: RuntimeConfig) -> int:
     # Preserve a short-track bias while allowing the range to change live.
     weights = list(range(len(minutes), 0, -1))
     return random.choices(minutes, weights=weights, k=1)[0] * 60
-
-
-def _pick_slot() -> int:
-    return random.randint(1, _SLOT_COUNT)
-
-
-def log(msg: str) -> None:
-    timestamp = time.strftime("%H:%M:%S")
-    sys.stdout.write(f"[{timestamp}] {msg}\n")
-    sys.stdout.flush()
 
 
 def _load_or_build_chain(paths: Paths, order: int) -> tuple[dict, int]:
@@ -144,7 +135,7 @@ def _run_cycle(
     plan = plan_song(
         chain=chain, order=order, paths=paths, runtime_cfg=runtime_cfg,
         requested_duration=duration, song_state=song_state, takes_per_song=takes_per_song,
-        pick_slot=_pick_slot, random_duration_seconds=_random_duration_seconds,
+        random_duration_seconds=_random_duration_seconds,
         read_preset=_read_preset, log=log,
     )
     if plan is None:
@@ -169,8 +160,6 @@ def _run_cycle(
         lyrics_chain=lyrics_chain, lyrics_order=lyrics_order,
         vocal_mode=plan.vocal_mode, log=log,
     )
-    json_path.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n")
-    log(f"wrote {mp3_path.name}")
     if autofeedback:
         try:
             apply_feedback(
@@ -181,6 +170,12 @@ def _run_cycle(
             )
         except Exception as exc:  # noqa: BLE001
             log(f"autofeedback failed: {exc!r}")
+    mp3_path, json_path = publish_output(
+        mp3_path=mp3_path, json_path=json_path, sidecar=sidecar, paths=paths,
+    )
+    if song_state is not None:
+        song_state["last_mp3_path"] = str(mp3_path)
+    log(f"queued {mp3_path.name}")
     save_codes_chain(codes_chain, codes_order, paths.codes_chain_path)
     save_lyrics_chain(lyrics_chain, lyrics_order, paths.lyrics_chain_path)
     return True
@@ -250,9 +245,9 @@ def main(argv: list[str] | None = None) -> int:
             log(f"runtime config invalid at startup; using defaults: {exc}")
         log(f"runtime config: {runtime_cfg}")
         # Persistent song state — survives across cycles within one ./create
-        # invocation so multiple takes share caption+slot+duration. Cleared
+        # invocation so multiple takes share caption+duration. Cleared
         # automatically when takes_left hits 0.
-        song_state: dict = {"caption": None, "slot": None, "duration": 0,
+        song_state: dict = {"caption": None, "duration": 0,
                             "takes_left": 0, "take_no": 0,
                             "cover_strength": runtime_cfg.cover_strength,
                             "last_mp3_path": None,
@@ -295,13 +290,15 @@ def main(argv: list[str] | None = None) -> int:
             if args.cycles and completed >= args.cycles:
                 log(f"completed {completed} cycle(s); exiting.")
                 break
-            # Back-pressure: if ./play is running, wait for the current track
-            # to finish before generating the next one so each generated slot
-            # actually gets played. With no player, this returns immediately
-            # and create runs at full speed. --no-wait-for-player skips this
-            # entirely so the chain evolves as fast as ace-server can synth.
+            # Back-pressure: keep a small FIFO buffer ready for the player,
+            # but start composing again as soon as the player claims a queued
+            # track. --no-wait-for-player still allows intentionally unbounded
+            # generation for training runs.
             if not args.no_wait_for_player:
-                wait_for_player(paths, stop_flag=stop_flag, log=log)
+                wait_for_buffer_space(
+                    paths, runtime_cfg.target_buffer_tracks,
+                    stop_flag=stop_flag, log=log,
+                )
         return 0
     finally:
         ace_client.shutdown_server(proc, log=log)

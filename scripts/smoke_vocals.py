@@ -1,7 +1,7 @@
 """Force a vocal cycle end-to-end, then ask /understand whether it heard vocals.
 
-Bypasses the loop's slot rotation so the user's running ./create can't
-overwrite the test artifacts.
+Writes outside the live queue so the user's running ./create and ./play
+cannot consume or archive the test artifacts.
 """
 from __future__ import annotations
 

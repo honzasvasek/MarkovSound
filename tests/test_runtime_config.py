@@ -34,6 +34,7 @@ def test_roundtrip_custom_config(tmp_path):
         {"vocal_prob": 1.1},
         {"takes_per_song": 0},
         {"cover_strength": -0.1},
+        {"target_buffer_tracks": 0},
     ],
 )
 def test_invalid_config_is_rejected(tmp_path, payload):

@@ -31,7 +31,6 @@ _CODES_READY_THRESHOLD = 1500
 class SongPlan:
     is_new_song: bool
     caption: str
-    slot: int
     duration: int
     scaffold: dict[str, object]
     vocal_mode: bool
@@ -70,7 +69,6 @@ def plan_song(
     requested_duration: int,
     song_state: dict | None,
     takes_per_song: int,
-    pick_slot: Callable[[], int],
     random_duration_seconds: Callable[[RuntimeConfig], int],
     read_preset: Callable[[Paths], str],
     log: Callable[[str], None],
@@ -91,12 +89,10 @@ def plan_song(
         if preset:
             log(f"caption preset: {preset!r}")
             caption = f"{preset}. {caption}"
-        slot = pick_slot()
         duration = requested_duration if requested_duration > 0 else random_duration_seconds(runtime_cfg)
         if song_state is not None:
             song_state.update(
                 caption=caption,
-                slot=slot,
                 duration=duration,
                 takes_left=max(1, takes_per_song),
                 take_no=0,
@@ -105,14 +101,13 @@ def plan_song(
                 last_audio_codes="",
             )
         log(f"NEW SONG: caption={caption[:80]!r}{'...' if len(caption)>80 else ''}")
-        log(f"          slot {slot:02d}, {duration}s, {song_state['takes_left'] if song_state else 1} takes")
+        log(f"          {duration}s, {song_state['takes_left'] if song_state else 1} takes")
     else:
         caption = song_state["caption"]
-        slot = song_state["slot"]
         duration = song_state["duration"]
         log(f"continuing SONG: take {song_state['take_no'] + 1} of {takes_per_song}")
         log(f"  caption={caption[:80]!r}{'...' if len(caption)>80 else ''}")
-        log(f"  slot {slot:02d}, {duration}s")
+        log(f"  {duration}s")
 
     if song_state is not None:
         song_state["take_no"] += 1
@@ -120,9 +115,9 @@ def plan_song(
     scaffold = _experimental_metadata()
     vocal_mode = random.random() < runtime_cfg.vocal_prob
     log(f"caption: {caption}")
-    log(f"slot {slot:02d} ({duration}s / {duration / 60:.1f} min)")
+    log(f"duration {duration}s / {duration / 60:.1f} min")
     log(f"scaffold: {scaffold['bpm']} bpm, {scaffold['keyscale']}, {scaffold['timesignature']}/4")
-    return SongPlan(is_new_song, caption, slot, duration, scaffold, vocal_mode)
+    return SongPlan(is_new_song, caption, duration, scaffold, vocal_mode)
 
 
 def prepare_lyrics(
@@ -251,18 +246,18 @@ def write_output(
     *, cycle: int, plan: SongPlan, lyrics_plan: LyricsPlan, result: SynthesisResult,
     paths: Paths, song_state: dict | None,
 ) -> tuple[Path, Path, dict]:
-    paths.audio_dir.mkdir(parents=True, exist_ok=True)
-    base = f"{plan.slot:02d}"
-    mp3_path = paths.audio_dir / f"{base}.mp3"
-    json_path = paths.audio_dir / f"{base}.json"
+    paths.staging_dir.mkdir(parents=True, exist_ok=True)
+    base = f"{cycle:06d}"
+    mp3_path = paths.staging_dir / f"{base}.mp3"
+    json_path = paths.staging_dir / f"{base}.json"
+    # Keep work-in-progress outputs out of Audio/queue until feedback has
+    # finished, so ./play only ever sees complete mp3/json pairs.
     mp3_path.write_bytes(result.mp3)
-    if song_state is not None:
-        song_state["last_mp3_path"] = str(mp3_path)
     append_used_lyrics(paths, cycle=cycle, mp3_name=mp3_path.name, enriched=result.enriched,
                        duration=result.enriched.get("duration"), vocal_mode=plan.vocal_mode,
                        lyrics_source=result.lyrics_source)
     sidecar = {
-        "cycle": cycle, "slot": plan.slot, "caption": plan.caption,
+        "cycle": cycle, "caption": plan.caption,
         "enriched_caption": result.enriched.get("caption"), "scaffold": plan.scaffold,
         "codes_source": result.codes_source, "vocal_mode": plan.vocal_mode,
         "lyrics_source": result.lyrics_source, "created_lyrics": lyrics_plan.created_lyrics,
@@ -278,6 +273,14 @@ def write_output(
     }
     return mp3_path, json_path, sidecar
 
+
+
+def publish_output(*, mp3_path: Path, json_path: Path, sidecar: dict) -> None:
+    """Atomically expose a fully-written track pair to the playback queue."""
+    json_tmp = json_path.with_suffix(".json.partial")
+    json_tmp.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n")
+    json_tmp.replace(json_path)
+    mp3_path.with_suffix(".mp3.partial").replace(mp3_path)
 
 def train_generated(
     *, result: SynthesisResult, lyrics_plan: LyricsPlan, sidecar: dict,
