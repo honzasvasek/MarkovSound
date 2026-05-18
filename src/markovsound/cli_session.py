@@ -81,9 +81,14 @@ def _write_current(paths: Paths, name: str) -> None:
 
 def _activate_session(paths: Paths, name: str) -> None:
     root = _session_root(paths, name)
-    _ensure_session_dirs(root)
+    # Move an old pre-session checkout out of the root *before* creating the
+    # target scaffolding.  Otherwise `use legacy` would create empty
+    # sessions/legacy/{state,Audio} first and then treat the real old root dirs
+    # as collisions, shunting them into *.pre_symlink_backup instead of making
+    # them the active legacy session.
     _safe_move_existing(paths, "state")
     _safe_move_existing(paths, "Audio")
+    _ensure_session_dirs(root)
     _replace_symlink(paths.repo_root / "state", root / "state")
     _replace_symlink(paths.repo_root / "Audio", root / "Audio")
     _write_current(paths, name)

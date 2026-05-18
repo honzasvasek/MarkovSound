@@ -36,3 +36,20 @@ def test_activate_session_moves_legacy_dirs_and_links_active_session(tmp_path, m
     assert (tmp_path / "sessions/legacy/Audio/seed.mp3").read_bytes() == b"x"
     assert (tmp_path / "state").resolve() == tmp_path / "sessions/live/state"
     assert (tmp_path / "Audio").resolve() == tmp_path / "sessions/live/Audio"
+
+
+def test_activate_legacy_uses_old_root_dirs_as_the_legacy_session(tmp_path, monkeypatch):
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "prompt_corpus.txt").write_text("seed")
+    (tmp_path / "Audio").mkdir()
+    (tmp_path / "Audio" / "seed.mp3").write_bytes(b"x")
+    paths = _discover_from(tmp_path, monkeypatch)
+
+    _activate_session(paths, "legacy")
+
+    assert (tmp_path / "state").resolve() == tmp_path / "sessions/legacy/state"
+    assert (tmp_path / "Audio").resolve() == tmp_path / "sessions/legacy/Audio"
+    assert (tmp_path / "state" / "prompt_corpus.txt").read_text() == "seed"
+    assert (tmp_path / "Audio" / "seed.mp3").read_bytes() == b"x"
+    assert not (tmp_path / "sessions/legacy/state.pre_symlink_backup").exists()
+    assert not (tmp_path / "sessions/legacy/Audio.pre_symlink_backup").exists()
