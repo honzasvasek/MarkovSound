@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import json
 import os
 import random
@@ -53,6 +54,44 @@ def _random_duration_seconds(cfg: RuntimeConfig) -> int:
     weights = list(range(len(minutes), 0, -1))
     return random.choices(minutes, weights=weights, k=1)[0] * 60
 
+
+
+@dataclass
+class ChainWatch:
+    """Track chain file mtimes so external maintenance edits can be hot-reloaded."""
+    path: Path
+    mtime_ns: int | None
+
+    @classmethod
+    def from_path(cls, path: Path) -> "ChainWatch":
+        return cls(path, path.stat().st_mtime_ns if path.exists() else None)
+
+    def changed_externally(self) -> bool:
+        current = self.path.stat().st_mtime_ns if self.path.exists() else None
+        return current != self.mtime_ns
+
+    def mark_current(self) -> None:
+        self.mtime_ns = self.path.stat().st_mtime_ns if self.path.exists() else None
+
+
+def _reload_changed_chains(
+    *, paths: Paths, chain: dict, order: int, codes_chain: dict, codes_order: int,
+    lyrics_chain: dict, lyrics_order: int, watches: dict[str, ChainWatch], log=print,
+) -> tuple[dict, int, dict, int, dict, int]:
+    """Hot-reload chain files modified by tools outside the running loop."""
+    if watches["text"].changed_externally() and paths.chain_path.exists():
+        chain, order = load_chain(paths.chain_path)
+        watches["text"].mark_current()
+        log(f"reloaded text chain from disk: {len(chain)} states, order={order}")
+    if watches["codes"].changed_externally() and paths.codes_chain_path.exists():
+        codes_chain, codes_order = load_codes_chain(paths.codes_chain_path)
+        watches["codes"].mark_current()
+        log(f"reloaded codes chain from disk: {codes_chain_stats(codes_chain)}")
+    if watches["lyrics"].changed_externally() and paths.lyrics_chain_path.exists():
+        lyrics_chain, lyrics_order = load_lyrics_chain(paths.lyrics_chain_path)
+        watches["lyrics"].mark_current()
+        log(f"reloaded lyrics chain from disk: {lyrics_chain_stats(lyrics_chain)}")
+    return chain, order, codes_chain, codes_order, lyrics_chain, lyrics_order
 
 def _load_or_build_chain(paths: Paths, order: int) -> tuple[dict, int]:
     if paths.chain_path.exists():
@@ -136,6 +175,7 @@ def _run_cycle(
     force_lyrics_mode: str = "auto",  # "auto" | "markov" | "lm"
     song_state: dict | None = None,
     takes_per_song: int = 1,
+    chain_watches: dict[str, ChainWatch] | None = None,
 ) -> bool:
     log(f"=== cycle {cycle} ===")
     plan = plan_song(
@@ -184,6 +224,11 @@ def _run_cycle(
     log(f"queued {mp3_path.name}")
     save_codes_chain(codes_chain, codes_order, paths.codes_chain_path)
     save_lyrics_chain(lyrics_chain, lyrics_order, paths.lyrics_chain_path)
+    if chain_watches is not None:
+        # Text may have been saved by feedback; all three watches should now
+        # represent this process's own latest writes, not external edits.
+        for watch in chain_watches.values():
+            watch.mark_current()
     return True
 
 
@@ -221,6 +266,11 @@ def main(argv: list[str] | None = None) -> int:
     chain, order = _load_or_build_chain(paths, args.order)
     codes_chain, codes_order = _load_codes_chain(paths)
     lyrics_chain, lyrics_order = _load_lyrics_chain(paths)
+    chain_watches = {
+        "text": ChainWatch.from_path(paths.chain_path),
+        "codes": ChainWatch.from_path(paths.codes_chain_path),
+        "lyrics": ChainWatch.from_path(paths.lyrics_chain_path),
+    }
 
     stop_flag = {"requested": False}
 
@@ -263,6 +313,12 @@ def main(argv: list[str] | None = None) -> int:
         while True:
             cycle += 1
             try:
+                chain, order, codes_chain, codes_order, lyrics_chain, lyrics_order = _reload_changed_chains(
+                    paths=paths, chain=chain, order=order,
+                    codes_chain=codes_chain, codes_order=codes_order,
+                    lyrics_chain=lyrics_chain, lyrics_order=lyrics_order,
+                    watches=chain_watches, log=log,
+                )
                 try:
                     runtime_cfg = load_runtime_config(paths.runtime_config_path)
                 except ValueError as exc:
@@ -283,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
                     force_lyrics_mode=args.lyrics_mode,
                     song_state=song_state,
                     takes_per_song=runtime_cfg.takes_per_song,
+                    chain_watches=chain_watches,
                 )
             except ace_client.AceError as exc:
                 log(f"cycle {cycle} failed: {exc}")
