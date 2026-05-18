@@ -1,0 +1,6 @@
+#!/bin/bash
+# remove legacy metadata suffixes from text-chain training captions
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m markovsound.cli_clean_caption_metadata "$@"

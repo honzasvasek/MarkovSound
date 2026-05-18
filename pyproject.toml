@@ -15,6 +15,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 markovsound = "markovsound.loop:main"
 markovsound-absorb = "markovsound.cli_absorb:main"
+markovsound-clean-caption-metadata = "markovsound.cli_clean_caption_metadata:main"
 markovsound-dedup = "markovsound.cli_dedup:main"
 markovsound-keep = "markovsound.cli_keep:main"
 markovsound-lyricist = "markovsound.lyricist:main"

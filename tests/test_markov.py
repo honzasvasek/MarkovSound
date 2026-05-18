@@ -24,3 +24,16 @@ def test_build_chain_keeps_sentence_boundaries():
 
     assert chain[("__START__",)]["alpha"] == 1
     assert chain[("beta",)]["__END__"] == 1
+
+
+def test_prune_metadata_suffix_starts_removes_bad_bpm_edge_only():
+    from markovsound.markov import prune_metadata_suffix_starts
+
+    chain = {
+        ("final", "chord", ","): {"bpm": 3.0, "then": 1.0},
+        ("frenetic", ",", "high"): {"bpm": 1.0},
+    }
+
+    assert prune_metadata_suffix_starts(chain) == 1
+    assert chain[("final", "chord", ",")] == {"then": 1.0}
+    assert chain[("frenetic", ",", "high")] == {"bpm": 1.0}

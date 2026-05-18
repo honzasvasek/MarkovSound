@@ -56,36 +56,28 @@ def steering_terms_in(text: str) -> set[str]:
     return hits
 
 
-def metadata_caption(meta: dict[str, Any]) -> str:
-    """Turn /understand output into a training caption.
 
-    We feed the *caption* and selected metadata fields back into the chain;
-    lyrics are intentionally ignored (they belong to a separate corpus).
+_TRAINING_METADATA_SUFFIX_RE = re.compile(
+    r",\s*\d+\s+bpm,\s*in\s+[^,]+,\s*\d+\s*time"
+    r"(?:,\s*[a-z]{2}\s+vocals)?\.?$",
+    re.IGNORECASE,
+)
+
+
+def strip_training_metadata(text: str) -> str:
+    """Remove legacy appended BPM/key/time/vocal metadata from a caption."""
+    cleaned = _TRAINING_METADATA_SUFFIX_RE.sub("", text.strip()).rstrip(" ,")
+    if cleaned and not cleaned.endswith("."):
+        cleaned += "."
+    return cleaned
+
+def metadata_caption(meta: dict[str, Any]) -> str:
+    """Return only the descriptive /understand caption for text-chain training.
+
+    Older versions appended BPM/key/time/language metadata here. In a Markov
+    text chain those suffixes become reusable fragments (`bpm, in d minor,
+    time, no vocals`) rather than useful musical guidance, so metadata now
+    stays in sidecars and the caption chain learns prose only.
     """
-    parts: list[str] = []
     caption = (meta.get("caption") or "").strip()
-    if caption:
-        parts.append(caption.rstrip("."))
-    extras: list[str] = []
-    bpm = meta.get("bpm")
-    if isinstance(bpm, (int, float)) and bpm > 0:
-        extras.append(f"{int(round(bpm))} bpm")
-    key = (meta.get("keyscale") or "").strip()
-    if key:
-        extras.append(f"in {key}")
-    ts = (meta.get("timesignature") or "").strip()
-    if ts:
-        extras.append(f"{ts} time")
-    lang = (meta.get("vocal_language") or "").strip().lower()
-    # zxx = no linguistic content; und/unknown/mul = LM couldn't tell.
-    # Drop anything that isn't a plausible 2-letter ISO 639-1 code.
-    if len(lang) == 2 and lang.isalpha() and lang not in {"zz"}:
-        extras.append(f"{lang} vocals")
-    if extras:
-        parts.append(", ".join(extras))
-    if not parts:
-        return ""
-    text = ", ".join(parts).strip()
-    if not text.endswith("."):
-        text += "."
-    return text
+    return strip_training_metadata(caption)

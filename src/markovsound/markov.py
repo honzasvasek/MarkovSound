@@ -137,3 +137,21 @@ def save_chain(chain: dict, order: int, path: Path) -> None:
 
 def load_chain(path: Path) -> tuple[dict, int]:
     return load_chain_payload(path)
+
+
+def prune_metadata_suffix_starts(chain: dict) -> int:
+    """Remove legacy caption-metadata suffix entry edges.
+
+    Old feedback captions appended `..., 188 bpm, in C# major, 2 time`.
+    The tokenizer drops digits, so every bad suffix begins as the edge
+    `(<caption tail>, ",") -> "bpm"`. Removing only those edges makes the
+    suffix subgraph unreachable without touching legitimate prose such as
+    `high bpm assault`.
+    """
+    removed = 0
+    for context, nexts in chain.items():
+        if context and context[-1] == "," and "bpm" in nexts:
+            del nexts["bpm"]
+            removed += 1
+    cleanup_chain(chain)
+    return removed
