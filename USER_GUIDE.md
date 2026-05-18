@@ -58,6 +58,17 @@ For example, change `min_duration_minutes` and `max_duration_minutes` to `4` and
 
 ---
 
+## 🧪 Development Checks
+
+For fast local regression checks that do not need ACE-Step running:
+
+```bash
+python3 -m pip install -e ".[dev]"
+PYTHONPATH=src pytest -q
+```
+
+The pytest suite covers pure logic such as live runtime config validation, prompt shaping, Markov-chain helpers, and cycle carry-over behavior. ACE-server integration still uses the smoke scripts because it depends on a live model backend.
+
 ## 🛠️ Common Commands
 
 | Command | Description |

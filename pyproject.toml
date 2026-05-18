@@ -9,6 +9,9 @@ description = "Generative music system combining Markov chain text generation wi
 requires-python = ">=3.11"
 dependencies = ["requests>=2.28"]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 markovsound = "markovsound.loop:main"
 markovsound-absorb = "markovsound.cli_absorb:main"

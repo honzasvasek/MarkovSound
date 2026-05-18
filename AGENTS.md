@@ -25,7 +25,7 @@ Use Python 3.11+, four-space indentation, type hints where practical, and `snake
 
 ## Testing Guidelines
 
-There is no formal unit-test framework, coverage target, or CI configuration. Validate behavior with smoke scripts and, for loop changes, a short `./create` run plus inspection of generated `.mp3`/`.json` pairs. If adding automated tests, place them under `tests/` and name files `test_*.py`.
+Pure logic is covered with `pytest` tests under `tests/`; run them with `PYTHONPATH=src pytest -q`. Keep ACE-server-dependent behavior in smoke scripts, and for loop changes still do a short `./create` run plus inspection of generated `.mp3`/`.json` pairs when the backend is available.
 
 ## Commit & Pull Request Guidelines
 
