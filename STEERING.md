@@ -42,10 +42,12 @@ captions and `./steer --preset <NAME>`.
   blocklist that autofeedback respects. `./steer` auto-whitelists
   whatever is in your seed captions; bulk-whitelist via
   `state/steering.json` if you want to bypass it permanently.
-- `--vocal-prob N` on `./create` — most techno is instrumental; you may
-  want to lower this from 0.8 to ~0.3 when steering toward techno.
-- Restart `./create` after editing any of these so the loop picks them
-  up (the running process holds the imports in memory).
+- `state/runtime.json:vocal_prob` — most techno is instrumental; you may
+  want to lower this from 0.5 to ~0.3 when steering toward techno. The loop
+  reloads this file before every cycle, so no restart is needed for runtime
+  knobs such as duration range, vocal probability, takes per song, or cover strength.
+- Restart `./create` after editing Python constants such as negative prompts
+  or blocklists; imported code is still held in memory.
 
 ## Verify the steer is working
 

@@ -21,6 +21,7 @@ class Paths:
     lyrics_corpus_path: Path
     used_lyrics_corpus_path: Path
     preset_path: Path
+    runtime_config_path: Path
 
     @classmethod
     def discover(cls) -> "Paths":
@@ -43,6 +44,7 @@ class Paths:
             lyrics_corpus_path=state / "understood_lyrics.txt",
             used_lyrics_corpus_path=state / "used_lyrics.txt",
             preset_path=state / "preset.txt",
+            runtime_config_path=state / "runtime.json",
         )
 
 

@@ -24,6 +24,16 @@ from .codes_markov import (
     train_codes,
 )
 from .config import AceConfig, Paths
+from .corpora import append_understood_lyrics, append_used_lyrics
+from .playback import wait_for_player
+from .runtime_config import RuntimeConfig, load_runtime_config
+from .song import (
+    _LM_CFG_SCALE,
+    _LM_NEGATIVE_PROMPT,
+    _LM_NEGATIVE_PROMPT_VOCAL,
+    _experimental_metadata,
+    _vocalize_caption,
+)
 from .describe import is_too_pop, metadata_caption
 from .lyrics_markov import (
     chain_stats as lyrics_chain_stats,
@@ -56,20 +66,14 @@ _DEFAULT_ORDER = 3
 _DEFAULT_DURATION = 0  # 0 = random duration each cycle
 _DEFAULT_MIN_WORDS = 18
 _DEFAULT_MAX_WORDS = 70
-
-# Track length distribution: 2–10 minutes, bias toward shorter end.
-_DURATION_MINUTES = [2, 3, 4, 5, 6, 7, 8, 9, 10]
-_DURATION_WEIGHTS = [5, 5, 4, 4, 3, 3, 2, 2, 2]
-
-# Fixed pool of slot filenames the loop rotates through. Each new track picks
-# a random slot 1..N and overwrites whatever was there — the set continuously
-# mutates as the chains evolve.
 _SLOT_COUNT = 10
 
 
-def _random_duration_seconds() -> int:
-    minutes = random.choices(_DURATION_MINUTES, weights=_DURATION_WEIGHTS, k=1)[0]
-    return minutes * 60
+def _random_duration_seconds(cfg: RuntimeConfig) -> int:
+    minutes = cfg.duration_minutes()
+    # Preserve a short-track bias while allowing the range to change live.
+    weights = list(range(len(minutes), 0, -1))
+    return random.choices(minutes, weights=weights, k=1)[0] * 60
 
 
 def _pick_slot() -> int:
@@ -87,104 +91,6 @@ def _lyric_token_bounds(duration: int) -> tuple[int, int]:
     max_tokens = max(150, duration * 2)
     min_tokens = max(40, max_tokens // 3)
     return min_tokens, max_tokens
-
-# Push ACE-Step away from cheesy/over-polished production while leaving
-# room for whichever genre we've steered into. EDM/dance terms used to be
-# in here as negatives; removed so steering toward EDM/techno/house can
-# actually take. Keep the rejection of generic radio-ready polish.
-_LM_CFG_SCALE = 4.0
-_LM_NEGATIVE_PROMPT = (
-    "cheesy, generic, radio-ready, polished mix, smooth modern production, "
-    "verse-chorus-verse, summer vibe, singalong, hook, anthemic"
-)
-
-# Used on vocal cycles instead of _LM_NEGATIVE_PROMPT — drops the pop/rock
-# negatives (those *describe* vocal music) and pushes against silence only.
-# Solo-instrument / free-improv / sound-mass textures stay welcome; we just
-# want a singer on top.
-_LM_NEGATIVE_PROMPT_VOCAL = (
-    "no vocals, no singer, no voice, silent vocal track, instrumental only, "
-    "purely instrumental, no lyrics"
-)
-
-# Words in the markov caption that contradict a vocal cycle. We only strip
-# the literal "instrumental" cluster — "free jazz", "sound mass", "aleatoric"
-# are kept because the Zappa-style aesthetic depends on them; vocals just
-# need to coexist with that texture.
-_INSTRUMENTAL_PHRASES = (
-    "an instrumental piece",
-    "instrumental piece",
-    "purely instrumental",
-    "fully instrumental",
-    "entirely instrumental",
-    "instrumental composition",
-    "instrumental track",
-    "instrumental",
-)
-
-_VOCAL_HINT_WORDS = (
-    "vocal", "vocals", "sing", "singer", "singing", "choir", "voice", "voices",
-    "chant", "chanting", "rapper", "rapping", "lyrics", "shouting", "humming",
-)
-
-# Language → vocal-positive lead phrase. Prepended (not appended) so ACE's
-# attention puts it ahead of the rest of the caption — trailing hints get
-# overwhelmed by the body of a long markov caption.
-_LANG_VOCAL_LEAD = {
-    "en": "Song with prominent lead vocals in English",
-    "nl": "Nummer met prominente Nederlandse leadzang",
-    "fr": "Chanson avec voix principales en français",
-    "de": "Lied mit markantem deutschem Leadgesang",
-    "es": "Canción con voz principal en español",
-    "it": "Canzone con voce principale in italiano",
-    "ja": "Song with prominent Japanese-language lead vocals",
-}
-
-
-def _vocalize_caption(caption: str, lang: str) -> str:
-    """Rewrite a markov caption to point ACE toward singing.
-
-    Strips 'instrumental'-family phrasing and PREPENDS a language-specific
-    "song with lead vocals" lead so the front of the prompt is unambiguous
-    about wanting vocals (trailing hints get drowned by long captions).
-    """
-    rewritten = caption
-    for phrase in _INSTRUMENTAL_PHRASES:
-        rewritten = re.sub(rf"\b{re.escape(phrase)}\b\.?\s*", "", rewritten, flags=re.IGNORECASE)
-    rewritten = re.sub(r"\s+", " ", rewritten).strip(" .,;:-")
-    lead = _LANG_VOCAL_LEAD.get(lang.lower(), f"Song with prominent lead vocals in {lang}")
-    if not rewritten:
-        return lead + "."
-    # If the body already declares vocals, don't double up the lead — just
-    # ensure we end with a period.
-    if any(w in rewritten.lower() for w in _VOCAL_HINT_WORDS):
-        return rewritten if rewritten.endswith(".") else rewritten + "."
-    # Lowercase the first letter of the body so the concatenation reads as one
-    # sentence: "Song with … lead vocals over an explosive jazz piece."
-    body = rewritten[0].lower() + rewritten[1:] if rewritten[:1].isupper() else rewritten
-    out = f"{lead} over {body}"
-    if not out.endswith("."):
-        out += "."
-    return out
-
-# Wider, more experimental distribution than ACE's own LM would pick.
-# Skewed toward slow tempi and odd metres; drone/free-improv friendly.
-_BPM_CHOICES = [40, 45, 50, 55, 60, 66, 72, 80, 88, 100, 110, 125, 144, 160, 180, 200, 220]
-_KEYSCALE_CHOICES = [
-    "C major", "C minor", "C# minor", "D minor", "D# major",
-    "E minor", "F major", "F# minor", "G minor", "G# minor",
-    "A minor", "B♭ major", "B minor",
-]
-_TIMESIG_CHOICES = ["3", "4", "5", "7"]
-
-
-def _experimental_metadata() -> dict[str, object]:
-    return {
-        "bpm": random.choice(_BPM_CHOICES),
-        "keyscale": random.choice(_KEYSCALE_CHOICES),
-        "timesignature": random.choice(_TIMESIG_CHOICES),
-    }
-
 
 def log(msg: str) -> None:
     timestamp = time.strftime("%H:%M:%S")
@@ -265,141 +171,6 @@ def _read_preset(paths: Paths) -> str:
     return text
 
 
-def _append_lyrics_corpus(
-    out_path: Path,
-    *,
-    lyrics: str,
-    cycle: int | str,
-    mp3_name: str,
-    duration: float | int | None,
-    bpm,
-    key,
-    ts,
-    lang,
-    vocal_mode: bool,
-    lyrics_source: str,
-) -> None:
-    """Append one lyrics block to a corpus file with a tagged header.
-
-    Header format is consistent across understood_lyrics.txt and
-    used_lyrics.txt so they can be diffed / joined cycle-by-cycle.
-    """
-    text = (lyrics or "").rstrip()
-    if not text:
-        return
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    header = (
-        f"=== {stamp} cycle={cycle} file={mp3_name} dur={duration}s "
-        f"lang={lang or '?'} bpm={bpm if bpm is not None else '?'} "
-        f"key={key or '?'} ts={ts or '?'}/4 "
-        f"vocal_mode={vocal_mode} src={lyrics_source} ==="
-    )
-    with out_path.open("a", encoding="utf-8") as fh:
-        fh.write(header + "\n")
-        fh.write(text + "\n\n")
-
-
-def _append_understood_lyrics(
-    paths: Paths,
-    *,
-    cycle: int | str,
-    mp3_name: str,
-    meta: dict,
-    duration: float | int | None,
-    vocal_mode: bool,
-    lyrics_source: str,
-) -> None:
-    """Append the heard lyrics from this cycle to state/understood_lyrics.txt.
-
-    Builds a flat, searchable corpus of everything ACE has sung — independent
-    of the chain, so we can redesign the lyrics pipeline against real data.
-    """
-    _append_lyrics_corpus(
-        paths.lyrics_corpus_path,
-        lyrics=meta.get("lyrics") or "",
-        cycle=cycle,
-        mp3_name=mp3_name,
-        duration=duration,
-        bpm=meta.get("bpm"),
-        key=meta.get("keyscale"),
-        ts=meta.get("timesignature"),
-        lang=meta.get("vocal_language"),
-        vocal_mode=vocal_mode,
-        lyrics_source=lyrics_source,
-    )
-
-
-def _append_used_lyrics(
-    paths: Paths,
-    *,
-    cycle: int | str,
-    mp3_name: str,
-    enriched: dict,
-    duration: float | int | None,
-    vocal_mode: bool,
-    lyrics_source: str,
-) -> None:
-    """Append the lyrics that were actually sent to /synth this cycle to
-    state/used_lyrics.txt. Same header format as understood_lyrics.txt so
-    the two corpora can be diffed cycle-for-cycle to see what ACE rendered
-    vs what we asked it to sing."""
-    _append_lyrics_corpus(
-        paths.used_lyrics_corpus_path,
-        lyrics=enriched.get("lyrics") or "",
-        cycle=cycle,
-        mp3_name=mp3_name,
-        duration=duration,
-        bpm=enriched.get("bpm"),
-        key=enriched.get("keyscale"),
-        ts=enriched.get("timesignature"),
-        lang=enriched.get("vocal_language"),
-        vocal_mode=vocal_mode,
-        lyrics_source=lyrics_source,
-    )
-
-
-def _now_playing_path(paths: Paths) -> Path:
-    return paths.state_dir / "now_playing.json"
-
-
-def _wait_for_player(paths: Paths, stop_flag: dict | None = None) -> None:
-    """Block until the currently-playing track is expected to finish.
-
-    `./play` writes state/now_playing.json {file, started_at, duration} each
-    time it starts a track. If that file is missing or its expected end is
-    already in the past (with a 60s grace for staleness), return immediately
-    — no active player, so create runs at full speed. Otherwise poll-sleep
-    until the track's remaining playback time has elapsed so the next
-    generated slot lands in sync with the next playback turn.
-    """
-    state_path = _now_playing_path(paths)
-    logged = False
-    while True:
-        if stop_flag and stop_flag.get("requested"):
-            return
-        if not state_path.exists():
-            return
-        try:
-            state = json.loads(state_path.read_text())
-            started = float(state.get("started_at", 0))
-            duration = float(state.get("duration", 0))
-        except (OSError, ValueError, TypeError):
-            return
-        expected_end = started + duration
-        now = time.time()
-        # State is stale → player is gone.
-        if now > expected_end + 60:
-            return
-        remaining = expected_end - now
-        if remaining <= 1:
-            return
-        if not logged:
-            log(f"player active ({state.get('file', '?')}); waiting {remaining:.0f}s for it to finish")
-            logged = True
-        time.sleep(min(remaining, 5))
-
-
 def _run_cycle(
     cycle: int,
     chain: dict,
@@ -410,6 +181,7 @@ def _run_cycle(
     lyrics_order: int,
     paths: Paths,
     ace_cfg: AceConfig,
+    runtime_cfg: RuntimeConfig,
     duration: int,  # 0 = pick randomly per cycle
     autofeedback: bool,
     force_codes_mode: str = "auto",  # "auto" | "markov" | "lm"
@@ -434,8 +206,8 @@ def _run_cycle(
     if is_new_song:
         caption = generate_caption(
             chain, order,
-            min_words=_DEFAULT_MIN_WORDS,
-            max_words=_DEFAULT_MAX_WORDS,
+            min_words=runtime_cfg.caption_min_words,
+            max_words=runtime_cfg.caption_max_words,
             temperature=1.0,
         )
         if not caption:
@@ -446,7 +218,7 @@ def _run_cycle(
             log(f"caption preset: {preset!r}")
             caption = f"{preset}. {caption}"
         slot = _pick_slot()
-        song_duration = duration if duration > 0 else _random_duration_seconds()
+        song_duration = duration if duration > 0 else _random_duration_seconds(runtime_cfg)
         if song_state is not None:
             song_state["caption"] = caption
             song_state["slot"] = slot
@@ -652,7 +424,7 @@ def _run_cycle(
     # Log the lyrics that were actually fed to /synth this cycle. Mirrors
     # state/understood_lyrics.txt so the two can be diffed: what we asked
     # ACE to sing vs what the transcriber heard come back.
-    _append_used_lyrics(
+    append_used_lyrics(
         paths,
         cycle=cycle,
         mp3_name=mp3_path.name,
@@ -789,7 +561,7 @@ def _run_cycle(
             corpus_meta["lyrics"] = heard_lyrics
             if transcriber_lang:
                 corpus_meta["vocal_language"] = transcriber_lang
-            _append_understood_lyrics(
+            append_understood_lyrics(
                 paths,
                 cycle=cycle,
                 mp3_name=mp3_path.name,
@@ -818,7 +590,7 @@ def _run_cycle(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="markovsound", description="generative music loop")
     parser.add_argument("-d", "--duration", type=int, default=_DEFAULT_DURATION,
-                        help="track duration in seconds; 0 = random 1-10 min per cycle (default)")
+                        help="fixed track duration in seconds; 0 = use live state/runtime.json duration range")
     parser.add_argument("-n", "--cycles", type=int, default=0,
                         help="stop after N cycles (0 = run forever)")
     parser.add_argument("--no-autofeedback", action="store_true",
@@ -830,8 +602,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--codes-mode", choices=["auto", "markov", "lm"], default="auto",
                         help="audio_codes source: 'auto' = markov once chain has enough, "
                              "'markov' = always force markov (errors if empty), 'lm' = always /lm")
-    parser.add_argument("--vocal-prob", type=float, default=0.5,
-                        help="probability of a vocal cycle (0.0-1.0)")
     parser.add_argument("--vocal-lang", default="en",
                         help="ISO 639-1 vocal language (en, fr, de, nl, es, it, ja, ...)")
     parser.add_argument("--lyrics-mode", choices=["auto", "markov", "lm"], default="auto",
@@ -841,16 +611,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-wait-for-player", action="store_true",
                         help="don't pause between cycles when ./play is running — "
                              "go full speed so the chain evolves faster")
-    parser.add_argument("--takes-per-song", type=int, default=3,
-                        help="how many re-renders of the same song before moving on "
-                             "(default 3). Take 1 generates fresh; takes 2..N run "
-                             "ACE's cover mode using the previous take's mp3 as "
-                             "src_audio and its transcribed lyrics as the lyrics. "
-                             "1 = old behaviour (one take per song).")
-    parser.add_argument("--cover-strength", type=float, default=0.6,
-                        help="audio_cover_strength for cover-mode takes (0.0–1.0; "
-                             "default 0.6). Lower = more like the previous take; "
-                             "higher = more variation. ACE's default is 1.0.")
     args = parser.parse_args(argv)
 
     paths = Paths.discover()
@@ -884,6 +644,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         cycle = _read_cycle(paths)
         completed = 0
+        try:
+            runtime_cfg = load_runtime_config(paths.runtime_config_path)
+        except ValueError as exc:
+            runtime_cfg = RuntimeConfig()
+            log(f"runtime config invalid at startup; using defaults: {exc}")
+        log(f"runtime config: {runtime_cfg}")
         # Persistent song state — survives across cycles within one ./create
         # invocation so multiple takes share caption+slot+duration. Cleared
         # automatically when takes_left hits 0.
@@ -892,21 +658,31 @@ def main(argv: list[str] | None = None) -> int:
                             "cover_strength": args.cover_strength,
                             "last_mp3_path": None,
                             "last_transcribed_lyrics": "",
-                            "last_audio_codes": ""}
+                            "last_audio_codes": "",
+                            "runtime_cfg": runtime_cfg}
         while True:
             cycle += 1
             try:
+                try:
+                    runtime_cfg = load_runtime_config(paths.runtime_config_path)
+                except ValueError as exc:
+                    log(f"runtime config invalid; keeping previous values: {exc}")
+                else:
+                    if runtime_cfg != song_state.get("runtime_cfg"):
+                        log(f"runtime config: {runtime_cfg}")
+                        song_state["runtime_cfg"] = runtime_cfg
+                    song_state["cover_strength"] = runtime_cfg.cover_strength
                 ok = _run_cycle(
                     cycle, chain, order, codes_chain, codes_order,
-                    lyrics_chain, lyrics_order, paths, ace_cfg,
+                    lyrics_chain, lyrics_order, paths, ace_cfg, runtime_cfg,
                     duration=args.duration,
                     autofeedback=not args.no_autofeedback,
                     force_codes_mode=args.codes_mode,
-                    vocal_prob=args.vocal_prob,
+                    vocal_prob=runtime_cfg.vocal_prob,
                     vocal_lang=args.vocal_lang,
                     force_lyrics_mode=args.lyrics_mode,
                     song_state=song_state,
-                    takes_per_song=args.takes_per_song,
+                    takes_per_song=runtime_cfg.takes_per_song,
                 )
             except ace_client.AceError as exc:
                 log(f"cycle {cycle} failed: {exc}")
@@ -926,7 +702,7 @@ def main(argv: list[str] | None = None) -> int:
             # and create runs at full speed. --no-wait-for-player skips this
             # entirely so the chain evolves as fast as ace-server can synth.
             if not args.no_wait_for_player:
-                _wait_for_player(paths, stop_flag=stop_flag)
+                wait_for_player(paths, stop_flag=stop_flag, log=log)
         return 0
     finally:
         ace_client.shutdown_server(proc, log=log)

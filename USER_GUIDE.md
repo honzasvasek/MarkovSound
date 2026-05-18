@@ -37,10 +37,24 @@ Over time, the Markov chains can become "stuck" on certain patterns (peaks in we
 ### 3. The Seed (Corpus)
 The system starts its life from a **corpus** of text. By adding your own descriptive phrases, genres, or avant-garde concepts to the initial training data, you set the starting trajectory of the evolution.
 
-### 4. Probabilistic Knobs
-When starting the loop (`./create`), you can adjust the nature of the output:
-- `--vocal-prob`: Increase this (e.g., `0.5`) for more singing/spoken word, or `0.0` for purely instrumental.
-- `--codes-mode`: Switch between `lm` (let the AI decide the sound) and `markov` (force the system to use its own learned audio tokens for more abstract results).
+### 4. Live Runtime Config
+`./create` reads `state/runtime.json` before every cycle, so these values can be edited while it is running — no restart required:
+
+```json
+{
+  "min_duration_minutes": 2,
+  "max_duration_minutes": 10,
+  "caption_min_words": 18,
+  "caption_max_words": 70,
+  "vocal_prob": 0.5,
+  "takes_per_song": 3,
+  "cover_strength": 0.6
+}
+```
+
+For example, change `min_duration_minutes` and `max_duration_minutes` to `4` and `6`, save the file, and the next **new song** will use that range. Existing multi-take songs keep their already chosen duration until the next song starts. A tracked template lives at `runtime.example.json`.
+
+`--codes-mode` and `--lyrics-mode` are still startup flags because they change generation strategy rather than per-song shape.
 
 ---
 
