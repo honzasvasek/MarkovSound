@@ -275,12 +275,17 @@ def write_output(
 
 
 
-def publish_output(*, mp3_path: Path, json_path: Path, sidecar: dict) -> None:
-    """Atomically expose a fully-written track pair to the playback queue."""
-    json_tmp = json_path.with_suffix(".json.partial")
-    json_tmp.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n")
-    json_tmp.replace(json_path)
-    mp3_path.with_suffix(".mp3.partial").replace(mp3_path)
+def publish_output(
+    *, mp3_path: Path, json_path: Path, sidecar: dict, paths: Paths,
+) -> tuple[Path, Path]:
+    """Move a complete staged track pair into the playback queue."""
+    json_path.write_text(json.dumps(sidecar, indent=2, ensure_ascii=False) + "\n")
+    paths.queue_dir.mkdir(parents=True, exist_ok=True)
+    queued_mp3 = paths.queue_dir / mp3_path.name
+    queued_json = paths.queue_dir / json_path.name
+    json_path.replace(queued_json)
+    mp3_path.replace(queued_mp3)
+    return queued_mp3, queued_json
 
 def train_generated(
     *, result: SynthesisResult, lyrics_plan: LyricsPlan, sidecar: dict,
