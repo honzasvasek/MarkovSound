@@ -2,6 +2,7 @@
 .claude/
 .venv*/
 __pycache__/
+.pytest_cache/
 *.py[cod]
 
 # Runtime/generated data
@@ -9,5 +10,3 @@ Audio/
 Music/
 state/
 snapshots/
-tmp.mp3
-cover.jpg
