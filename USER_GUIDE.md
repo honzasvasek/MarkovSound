@@ -77,6 +77,7 @@ The pytest suite covers pure logic such as live runtime config validation, promp
 | :--- | :--- |
 | `./create` | Starts the main generation loop. |
 | `./play` | Launches the interactive player with `INS`/`DEL` curation. |
+| `./transcriber` | Starts the optional vocal transcriber in one-GPU sleep/wake mode. |
 | `./session current` | Shows the active isolated working session. |
 | `./session save NAME --use` | Copies the current state/audio into a named session and activates it. |
 | `PYTHONPATH=src python3 -m markovsound.cli_dedup` | Flattens chains to increase diversity and break repetitions. |
@@ -107,6 +108,23 @@ The first activation migrates the old root working directories into
 runtime config, and cycle counter for the newly active session. `./play` also
 continues to work through the root symlink; a track already playing is archived
 back into the session it came from.
+
+## One-GPU Transcriber Mode
+
+The optional external vocal transcriber is too large to stay awake beside
+ACE-Step on one 16 GB GPU. Start it in one terminal, then put the freshly
+started service to sleep from another:
+
+```bash
+./transcriber
+./sleep-transcriber
+```
+
+The wrapper enables vLLM sleep mode on GPU 0. During normal composition the
+transcriber sleeps and leaves the GPU to ACE-Step; when feedback reaches the
+transcription step, `./create` wakes it, transcribes one track, and puts it back
+to sleep. A sleeping transcriber still uses host RAM, but releases almost all
+VRAM.
 
 ## 🎼 Philosophy
 MarkovSound is intended to move away from "pop" and commercial music structures. It aims for the intersection of contemporary composition, free jazz, and algorithmic exploration. The "artefacts" and "glitches" of the process are not bugs—they are the primary material.

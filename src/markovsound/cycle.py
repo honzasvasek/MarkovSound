@@ -371,12 +371,16 @@ def _train_understood_codes(*, meta: dict, codes_chain: dict, codes_order: int, 
 
 def _transcribe_track(*, mp3_path: Path, sidecar: dict, log: Callable[[str], None]) -> TranscriptionResult:
     """Prefer the richer external transcriber, but degrade cleanly when unavailable."""
+    base_url = cli_transcribe.DEFAULT_BASE_URL
     try:
-        if not cli_transcribe.server_alive(cli_transcribe.DEFAULT_BASE_URL):
+        if not cli_transcribe.server_alive(base_url):
             return TranscriptionResult()
+        woke = cli_transcribe.wake(base_url)
+        if woke:
+            log("transcriber: woke from sleep")
         t0 = time.time()
         result = cli_transcribe.transcribe_one(
-            cli_transcribe.DEFAULT_BASE_URL,
+            base_url,
             cli_transcribe.DEFAULT_MODEL,
             mp3_path,
         )
@@ -397,6 +401,12 @@ def _transcribe_track(*, mp3_path: Path, sidecar: dict, log: Callable[[str], Non
     except Exception as exc:  # noqa: BLE001
         log(f"transcriber failed (continuing with /understand lyrics): {exc!r}")
         return TranscriptionResult()
+    finally:
+        try:
+            if cli_transcribe.sleep(base_url):
+                log("transcriber: sleeping")
+        except Exception as exc:  # noqa: BLE001
+            log(f"transcriber sleep failed: {exc!r}")
 
 
 def _train_heard_lyrics(

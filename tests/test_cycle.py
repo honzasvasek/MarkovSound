@@ -68,3 +68,31 @@ def test_publish_output_moves_staged_pair_into_queue(tmp_path):
     assert queued_mp3.read_bytes() == b"mp3"
     assert '"cycle": 123' in queued_json.read_text()
     assert not staged_mp3.exists()
+
+
+def test_transcribe_track_wakes_and_resleeps_external_transcriber(monkeypatch, tmp_path):
+    from markovsound import cycle
+
+    events: list[str] = []
+    monkeypatch.setattr(cycle.cli_transcribe, "server_alive", lambda _url: True)
+    monkeypatch.setattr(cycle.cli_transcribe, "wake", lambda _url: events.append("wake") or True)
+    monkeypatch.setattr(cycle.cli_transcribe, "sleep", lambda _url: events.append("sleep") or True)
+    monkeypatch.setattr(
+        cycle.cli_transcribe,
+        "transcribe_one",
+        lambda *_args, **_kwargs: {
+            "parsed": {"lyrics": "heard", "languages": "nl"},
+            "runaway": False,
+        },
+    )
+
+    result = cycle._transcribe_track(
+        mp3_path=tmp_path / "x.mp3",
+        sidecar={},
+        log=lambda msg: events.append(msg),
+    )
+
+    assert result == TranscriptionResult("heard", "nl")
+    assert events[0] == "wake"
+    assert "transcriber: woke from sleep" in events
+    assert events[-2:] == ["sleep", "transcriber: sleeping"]

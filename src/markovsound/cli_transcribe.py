@@ -7,15 +7,19 @@ endpoint, using the prompt the model card specifies:
 
 Saves the raw text response and a parsed view to JSONL.
 
-Server setup (run separately, needs ~13 GB VRAM):
+One-GPU server setup (run separately, needs ~13 GB VRAM while awake):
 
-    pip install vllm
-    vllm serve Civitai/acestep-transcriber-FP8 \\
-        --host 0.0.0.0 --port 8000 \\
-        --max-model-len 32768 --gpu-memory-utilization 0.9 \\
-        --trust-remote-code
+    VLLM_SERVER_DEV_MODE=1 vllm serve Civitai/acestep-transcriber-FP8 \\
+        --host 127.0.0.1 --port 8001 \\
+        --max-model-len 32768 --max-num-seqs 1 \\
+        --gpu-memory-utilization 0.85 --kv-cache-dtype fp8 \\
+        --enable-sleep-mode --trust-remote-code
 
-Endpoint can be overridden via TRANSCRIBER_URL (default http://127.0.0.1:8000)
+With vLLM sleep mode enabled, MarkovSound wakes the transcriber only around
+one transcription and puts it back to sleep afterwards so it can share one
+16 GB GPU with ACE-Step.
+
+Endpoint can be overridden via TRANSCRIBER_URL (default http://127.0.0.1:8001)
 and TRANSCRIBER_MODEL (default Civitai/acestep-transcriber-FP8).
 """
 from __future__ import annotations
@@ -50,6 +54,45 @@ def server_alive(base_url: str) -> bool:
         return r.ok
     except requests.RequestException:
         return False
+
+
+def sleep_supported(base_url: str) -> bool:
+    """Return whether this vLLM server exposes dev-mode sleep endpoints."""
+    try:
+        r = requests.get(f"{base_url}/is_sleeping", timeout=3)
+        return r.ok and isinstance(r.json().get("is_sleeping"), bool)
+    except (requests.RequestException, ValueError, AttributeError):
+        return False
+
+
+def is_sleeping(base_url: str) -> bool | None:
+    """Return sleep state, or None when the server has no sleep API."""
+    try:
+        r = requests.get(f"{base_url}/is_sleeping", timeout=3)
+        if not r.ok:
+            return None
+        value = r.json().get("is_sleeping")
+        return value if isinstance(value, bool) else None
+    except (requests.RequestException, ValueError, AttributeError):
+        return None
+
+
+def wake(base_url: str) -> bool:
+    """Wake a sleep-capable vLLM server. Return whether a wake was sent."""
+    sleeping = is_sleeping(base_url)
+    if sleeping is not True:
+        return False
+    requests.post(f"{base_url}/wake_up", timeout=30).raise_for_status()
+    return True
+
+
+def sleep(base_url: str) -> bool:
+    """Sleep a sleep-capable vLLM server. Return whether sleep was sent."""
+    sleeping = is_sleeping(base_url)
+    if sleeping is not False:
+        return False
+    requests.post(f"{base_url}/sleep", params={"level": 1}, timeout=30).raise_for_status()
+    return True
 
 
 def _build_audio_part(audio_b64: str, fmt: str) -> dict:
@@ -368,10 +411,11 @@ def main(argv: list[str] | None = None) -> int:
     if not server_alive(args.url):
         print(
             f"transcriber not reachable at {args.url}. Start vLLM with:\n"
-            f"  vllm serve {args.model} \\\n"
-            f"      --host 0.0.0.0 --port 8000 \\\n"
-            f"      --max-model-len 32768 --gpu-memory-utilization 0.9 \\\n"
-            f"      --trust-remote-code",
+            f"  VLLM_SERVER_DEV_MODE=1 vllm serve {args.model} \\\n"
+            f"      --host 127.0.0.1 --port 8001 \\\n"
+            f"      --max-model-len 32768 --max-num-seqs 1 \\\n"
+            f"      --gpu-memory-utilization 0.85 --kv-cache-dtype fp8 \\\n"
+            f"      --enable-sleep-mode --trust-remote-code",
             file=sys.stderr,
         )
         return 1

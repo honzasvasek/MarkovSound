@@ -114,7 +114,10 @@ Defaults assume:
 - `GET /health`
 
 The optional external transcriber used by `cli_transcribe.py` is separate from
-`ace-understand` and may be unavailable; the loop degrades gracefully.
+`ace-understand` and may be unavailable; the loop degrades gracefully. For the
+single-GPU setup, run `./transcriber`, then `./sleep-transcriber` once startup
+finishes. `cycle.py` wakes that server only around one transcription and sends
+it back to sleep afterwards so ACE-Step can reclaim GPU memory.
 
 ## Common development commands
 
@@ -129,6 +132,8 @@ PYTHONPATH=src pytest -q
 ./clean-caption-metadata --dry-run
 ./session current
 ./session save experiment-a --use
+./transcriber
+./sleep-transcriber
 python3 scripts/smoke_ace.py
 python3 scripts/smoke_vocals.py
 ```

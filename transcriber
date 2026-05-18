@@ -1,0 +1,17 @@
+#!/bin/bash
+# Run the optional ACE-Step vocal transcriber in one-GPU sleep/wake mode.
+set -eu
+here="$(cd "$(dirname "$0")" && pwd)"
+cd "$here"
+
+exec env CUDA_VISIBLE_DEVICES="${TRANSCRIBER_CUDA_DEVICE:-0}" \
+    VLLM_SERVER_DEV_MODE=1 \
+    "$here/.venv-vllm/bin/vllm" serve "${TRANSCRIBER_MODEL:-Civitai/acestep-transcriber-FP8}" \
+    --host "${TRANSCRIBER_HOST:-127.0.0.1}" \
+    --port "${TRANSCRIBER_PORT:-8001}" \
+    --max-model-len "${TRANSCRIBER_MAX_MODEL_LEN:-32768}" \
+    --max-num-seqs 1 \
+    --gpu-memory-utilization "${TRANSCRIBER_GPU_MEMORY_UTILIZATION:-0.85}" \
+    --kv-cache-dtype fp8 \
+    --enable-sleep-mode \
+    --trust-remote-code

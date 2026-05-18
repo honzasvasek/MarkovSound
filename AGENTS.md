@@ -12,6 +12,8 @@ Core Python code lives in `src/markovsound/`. The main loop is in `loop.py`; foc
 - `./create` — run the live generation loop through `markovsound.loop`.
 - `./play` — listen to queued tracks and use `INS`/`DEL` curation controls.
 - `./session current` — inspect the active isolated runtime session.
+- `./transcriber` — run the optional vLLM vocal transcriber in one-GPU sleep/wake mode.
+- `./sleep-transcriber` — put a freshly started transcriber to sleep before live generation.
 - `./absorb Audio/absorb` — analyze reference audio and train the chains.
 - `./steer "prepared piano drones"` — bias the text chain toward a target style.
 - `PYTHONPATH=src python3 -m markovsound.cli_dedup` — flatten chain weights when output becomes repetitive.

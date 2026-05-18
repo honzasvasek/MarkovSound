@@ -1,0 +1,14 @@
+#!/bin/bash
+# Wait until the vLLM transcriber is reachable, then put it to sleep.
+set -eu
+url="${TRANSCRIBER_URL:-http://127.0.0.1:8001}"
+for _ in $(seq 1 180); do
+    if curl -fsS "$url/v1/models" >/dev/null 2>&1; then
+        curl -fsS -X POST "$url/sleep?level=1" >/dev/null
+        echo "transcriber sleeping"
+        exit 0
+    fi
+    sleep 1
+done
+echo "transcriber did not become ready at $url" >&2
+exit 1
