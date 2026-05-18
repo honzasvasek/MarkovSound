@@ -1,6 +1,6 @@
 # 🎧 MarkovSound: User Guide
 
-MarkovSound is an autonomous, generative music system. It doesn't just "make songs"—it maintains a living, evolving sonic environment that learns from its own output and your feedback.
+MarkovSound is an autonomous generative music system: it composes tracks, listens back to them, and changes future output through its own feedback plus your curation. For the deeper learning model, see `HOW_MARKOVSOUND_IMPROVES.md`.
 
 ## 🌀 How it Works
 
@@ -9,8 +9,8 @@ The system is built on a **Feedback Loop**. It uses Markov chains (statistical m
 ### The Pipeline:
 1. **Generation**: The system samples a descriptive caption from its internal memory (Markov chain).
 2. **Synthesis**: This caption is sent to the ACE-server, which generates an MP3.
-3. **Analysis (Autofeedback)**: The system "listens" to the generated audio using `ace-understand`, extracting metadata (BPM, key, description) and lyrics.
-4. **Learning**: This extracted metadata is fed back into the Markov chain, allowing the system to evolve its style over time based on what it actually produced.
+3. **Analysis (Autofeedback)**: The system listens back using `ace-understand` and, when available, a separate vocal transcriber.
+4. **Learning**: Clean descriptive prose, heard lyrics, and audio codes feed the relevant memories so later cycles are shaped by what was actually produced.
 
 ### The Three Chains:
 The system manages three distinct "memories":
@@ -76,7 +76,9 @@ The pytest suite covers pure logic such as live runtime config validation, promp
 | :--- | :--- |
 | `./create` | Starts the main generation loop. |
 | `./play` | Launches the interactive player with `INS`/`DEL` curation. |
-| `./dedup` | Flattens the chains to increase diversity and break repetitions. |
+| `PYTHONPATH=src python3 -m markovsound.cli_dedup` | Flattens chains to increase diversity and break repetitions. |
+| `./replace-lyrics OLD NEW` | Rewrites lyric-chain vocabulary. |
+| `./clean-caption-metadata` | Removes legacy metadata suffix paths from the text chain. |
 | `./verwijder <file>` | Manually remove a track and untrain it. |
 | `./keep <file>` | Manually boost a track's influence. |
 

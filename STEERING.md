@@ -35,7 +35,7 @@ captions and `./steer --preset <NAME>`.
 
 ## What else to tune when changing genre
 
-- `src/markovsound/loop.py:_LM_NEGATIVE_PROMPT` — global anti-cheese
+- `src/markovsound/song.py:_LM_NEGATIVE_PROMPT` — global anti-cheese
   list sent to `/lm`. Don't put your target genre in here. Currently
   rejects polish/anthemic/singalong only, leaving room for EDM/dance/jazz/etc.
 - `src/markovsound/describe.py:_POP_WORDS` / `_POP_PHRASES` — caption
@@ -51,7 +51,7 @@ captions and `./steer --preset <NAME>`.
 
 ## Verify the steer is working
 
-After `./steer` and a `./create` restart, watch the new captions:
+After `./steer`, the running loop will hot-reload the changed text chain before the next cycle. Watch the new captions:
 
     grep '^\[..:..:..\] caption:' /tmp/markovsound-create.log | tail -10
 
