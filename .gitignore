@@ -6,8 +6,10 @@ __pycache__/
 *.py[cod]
 
 # Runtime/generated data
+Audio
 Audio/
 Music/
+state
 state/
 sessions/
 snapshots/
