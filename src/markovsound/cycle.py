@@ -13,6 +13,7 @@ from .codes_markov import format_codes, parse_codes, sample_codes, train_codes
 from .config import AceConfig, Paths
 from .corpora import append_understood_lyrics, append_used_lyrics
 from .describe import metadata_caption
+from .latent_splice import frame_count, splice_latent_segments
 from .lyrics_markov import sample_lyrics, train_lyrics, untrain_lyrics
 from .markov import generate_caption, save_chain, train_text
 from .runtime_config import RuntimeConfig
@@ -52,6 +53,8 @@ class SynthesisResult:
     lm_seconds: float
     mp3: bytes
     synth_seconds: float
+    dead_end_positions: list[int] | None = None
+    latent_splice_overlap_frames: list[int] | None = None
 
 
 def lyric_token_bounds(duration: int) -> tuple[int, int]:
@@ -188,6 +191,7 @@ def synthesize(
     ace_cfg: AceConfig,
     force_codes_mode: str,
     song_state: dict | None,
+    latent_splice_seconds: float = 5.0,
     log: Callable[[str], None],
 ) -> SynthesisResult:
     request = lyrics_plan.request
@@ -195,6 +199,7 @@ def synthesize(
     src_audio: Path | None = None
     codes_source = "lm"
     lm_seconds = 0.0
+    dead_end_positions: list[int] | None = None
     use_cover = bool(song_state and not plan.is_new_song and song_state.get("last_mp3_path") and Path(song_state["last_mp3_path"]).exists())
     if use_cover:
         prev_mp3 = Path(song_state["last_mp3_path"])
@@ -217,9 +222,10 @@ def synthesize(
             if plan.vocal_mode and use_markov:
                 log("vocal cycle: routing through /lm so codes match the requested vocals")
             use_markov = False
+        dead_end_positions: list[int] | None = None
         if use_markov and codes_chain:
-            sampled, dead_ends = sample_codes(codes_chain, codes_order, max(1, int(plan.duration * 5)))
-            log(f"sampled {len(sampled)} markov codes ({dead_ends} dead-end jump(s))")
+            sampled, dead_end_positions = sample_codes(codes_chain, codes_order, max(1, int(plan.duration * 5)))
+            log(f"sampled {len(sampled)} markov codes ({len(dead_end_positions)} dead-end jump(s))")
             request["audio_codes"] = format_codes(sampled)
             request["vocal_language"] = "en"
             enriched = request
@@ -236,10 +242,35 @@ def synthesize(
                 generated = enriched.get("lyrics") or ""
                 log(f"LM generated lyrics: {generated[:100]!r}{'...' if len(generated) > 100 else ''}")
     t0 = time.time()
-    mp3, _latent = ace_client.synth(ace_cfg, enriched, src_audio=src_audio, log=log)
+    splice_overlaps: list[int] | None = None
+    if codes_source == "markov" and dead_end_positions and latent_splice_seconds > 0:
+        boundaries = [p for p in dead_end_positions if 0 < p < len(sampled)]
+        parts = [sampled[a:b] for a, b in zip([0, *boundaries], [*boundaries, len(sampled)])]
+        segment_latents: list[bytes] = []
+        for index, part in enumerate(parts, start=1):
+            segment_request = dict(enriched)
+            segment_request["audio_codes"] = format_codes(part)
+            segment_request["duration"] = len(part) / 5.0
+            _segment_mp3, segment_latent = ace_client.synth(ace_cfg, segment_request, log=log)
+            if segment_latent is None:
+                log("latent splice unavailable: /synth returned no latent; falling back to direct synth")
+                segment_latents = []
+                break
+            segment_latents.append(segment_latent)
+            log(f"latent splice segment {index}/{len(parts)}: {len(part)} codes, {frame_count(segment_latent)} frames")
+        if segment_latents:
+            merged_latents, splice_overlaps = splice_latent_segments(segment_latents, latent_splice_seconds)
+            mp3 = ace_client.vae_decode(ace_cfg, merged_latents, log=log)
+            enriched["duration"] = frame_count(merged_latents) / 25.0
+            log(f"latent-spliced {len(parts)} segments with overlap frames={splice_overlaps}")
+        else:
+            mp3, _latent = ace_client.synth(ace_cfg, enriched, src_audio=src_audio, log=log)
+    else:
+        mp3, _latent = ace_client.synth(ace_cfg, enriched, src_audio=src_audio, log=log)
     synth_seconds = round(time.time() - t0, 2)
     log(f"/synth done in {synth_seconds:.1f}s (mp3={len(mp3)} bytes, codes={codes_source})")
-    return SynthesisResult(enriched, codes_source, lyrics_source, lm_seconds, mp3, synth_seconds)
+    return SynthesisResult(enriched, codes_source, lyrics_source, lm_seconds, mp3, synth_seconds,
+                           dead_end_positions, splice_overlaps)
 
 
 def write_output(
@@ -269,6 +300,8 @@ def write_output(
         "synth_model": result.enriched.get("synth_model"), "inference_steps": result.enriched.get("inference_steps"),
         "lm_seconds": result.lm_seconds, "lyricist_seconds": lyrics_plan.lyricist_seconds,
         "synth_seconds": result.synth_seconds, "audio_codes": result.enriched.get("audio_codes"),
+        "dead_end_jump_code_positions": result.dead_end_positions,
+        "latent_splice_overlap_frames": result.latent_splice_overlap_frames,
         "trained_caption": None, "code_count": None,
     }
     return mp3_path, json_path, sidecar

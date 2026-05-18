@@ -63,7 +63,7 @@ def sample_codes(
     length: int,
     temperature: float = 1.0,
     max_dead_ends: int = 50,
-) -> tuple[list[int], int]:
+) -> tuple[list[int], list[int]]:
     """Sample `length` codes from the chain. On a dead-end, jump to a random
     known context — that's the crossover point where one absorbed track's
     trajectory hops onto another's."""
@@ -72,12 +72,12 @@ def sample_codes(
     contexts = list(chain.keys())
     context = list(random.choice(contexts))
     result: list[int] = []
-    dead_ends = 0
+    dead_end_positions: list[int] = []
     while len(result) < length:
         ctx = tuple(context[-order:])
         if ctx not in chain or not chain[ctx]:
-            dead_ends += 1
-            if dead_ends > max_dead_ends:
+            dead_end_positions.append(len(result))
+            if len(dead_end_positions) > max_dead_ends:
                 # absurdly stuck; just pad with random codes from any context
                 fallback = list(chain.keys())
                 while len(result) < length:
@@ -93,7 +93,7 @@ def sample_codes(
         next_code = random.choices(codes, weights=counts, k=1)[0]
         result.append(next_code)
         context.append(next_code)
-    return result, dead_ends
+    return result, dead_end_positions
 
 
 def save_codes_chain(chain: dict, order: int, path: Path) -> None:

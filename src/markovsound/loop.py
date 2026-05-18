@@ -194,7 +194,7 @@ def _run_cycle(
     result = synthesize(
         plan=plan, lyrics_plan=lyrics_plan, codes_chain=codes_chain,
         codes_order=codes_order, ace_cfg=ace_cfg, force_codes_mode=force_codes_mode,
-        song_state=song_state, log=log,
+        song_state=song_state, latent_splice_seconds=runtime_cfg.latent_splice_seconds, log=log,
     )
     mp3_path, json_path, sidecar = write_output(
         cycle=cycle, plan=plan, lyrics_plan=lyrics_plan, result=result,

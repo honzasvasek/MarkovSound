@@ -342,3 +342,20 @@ def understand(cfg: AceConfig, audio_path: Path, log=print) -> tuple[dict[str, A
             meta = meta[0]
         return meta, None
     raise AceError(f"/understand returned unexpected Content-Type: {ctype}")
+
+
+def vae_decode(cfg: AceConfig, latents: bytes, *, log=print) -> bytes:
+    """Decode raw flat `[T,64]` f32 latent bytes through ACE `/vae`."""
+    log(f"POST /vae decode latent_bytes={len(latents)}")
+    # `/vae` accepts exactly one payload side: audio for encode or src_latents
+    # for decode. Decode uses the server's configured default output format.
+    files = {
+        "src_latents": ("splice.vae", latents, "application/octet-stream"),
+    }
+    job_id = _submit_multipart(cfg, "/vae", files)
+    _wait_job(cfg, job_id, log=log)
+    r = _fetch_result(cfg, job_id)
+    ctype = r.headers.get("Content-Type", "")
+    if ctype.startswith("audio/"):
+        return r.content
+    raise AceError(f"/vae decode returned unexpected Content-Type: {ctype}")

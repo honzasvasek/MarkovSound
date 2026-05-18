@@ -16,6 +16,7 @@ class RuntimeConfig:
     takes_per_song: int = 3
     cover_strength: float = 0.6
     target_buffer_tracks: int = 1
+    latent_splice_seconds: float = 5.0
 
     def duration_minutes(self) -> list[int]:
         return list(range(self.min_duration_minutes, self.max_duration_minutes + 1))
@@ -31,6 +32,7 @@ def _coerce(data: dict) -> RuntimeConfig:
         takes_per_song=int(data.get("takes_per_song", 3)),
         cover_strength=float(data.get("cover_strength", 0.6)),
         target_buffer_tracks=int(data.get("target_buffer_tracks", 1)),
+        latent_splice_seconds=float(data.get("latent_splice_seconds", 5.0)),
     )
     if cfg.min_duration_minutes < 1:
         raise ValueError("min_duration_minutes must be >= 1")
@@ -48,6 +50,8 @@ def _coerce(data: dict) -> RuntimeConfig:
         raise ValueError("cover_strength must be between 0.0 and 1.0")
     if cfg.target_buffer_tracks < 1:
         raise ValueError("target_buffer_tracks must be >= 1")
+    if cfg.latent_splice_seconds < 0:
+        raise ValueError("latent_splice_seconds must be >= 0")
     return cfg
 
 
