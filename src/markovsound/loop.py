@@ -254,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
         # automatically when takes_left hits 0.
         song_state: dict = {"caption": None, "slot": None, "duration": 0,
                             "takes_left": 0, "take_no": 0,
-                            "cover_strength": args.cover_strength,
+                            "cover_strength": runtime_cfg.cover_strength,
                             "last_mp3_path": None,
                             "last_transcribed_lyrics": "",
                             "last_audio_codes": "",
