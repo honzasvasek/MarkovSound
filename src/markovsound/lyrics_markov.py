@@ -327,3 +327,45 @@ def prune_timestamps(chain: dict) -> dict:
         "outputs_removed": outputs_removed,
         "transitions_removed": transitions_removed,
     }
+
+
+
+
+def replace_string(chain: dict, old: str, new: str) -> dict[str, int]:
+    """Replace a string inside every lyrics-chain token.
+
+    Lyrics-chain tokens are words, punctuation, newlines, or whole bracket
+    headers. This means replacements can rewrite a whole token (`la`→`na`) or
+    part of a bracket header (`Rap`→`Spoken Rap`). Contexts and outgoing
+    transitions can collide after replacement; when they do, their weights are
+    summed so no learned probability mass is lost.
+    """
+    rebuilt: dict[tuple, dict[str, float]] = {}
+    contexts_changed = 0
+    outputs_changed = 0
+    merged_contexts = 0
+    merged_outputs = 0
+
+    for context, nexts in chain.items():
+        replaced_context = tuple(token.replace(old, new) for token in context)
+        if replaced_context != context:
+            contexts_changed += 1
+        if replaced_context in rebuilt:
+            merged_contexts += 1
+        target_nexts = rebuilt.setdefault(replaced_context, {})
+        for token, weight in nexts.items():
+            replaced_token = token.replace(old, new)
+            if replaced_token != token:
+                outputs_changed += 1
+            if replaced_token in target_nexts:
+                merged_outputs += 1
+            target_nexts[replaced_token] = target_nexts.get(replaced_token, 0.0) + weight
+
+    chain.clear()
+    chain.update(rebuilt)
+    return {
+        "contexts_changed": contexts_changed,
+        "outputs_changed": outputs_changed,
+        "merged_contexts": merged_contexts,
+        "merged_outputs": merged_outputs,
+    }

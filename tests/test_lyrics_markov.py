@@ -32,3 +32,32 @@ def test_prune_timestamps_removes_bad_contexts_and_outputs():
 
     assert stats == {"contexts_removed": 1, "outputs_removed": 1, "transitions_removed": 2}
     assert chain == {("ok",): {"la": 1.0}}
+
+
+def test_replace_string_merges_contexts_and_outputs_without_losing_weight():
+    from markovsound.lyrics_markov import replace_string
+
+    chain = {
+        ("old",): {"old": 1.0, "new": 2.0},
+        ("new",): {"old": 3.0},
+    }
+
+    stats = replace_string(chain, "old", "new")
+
+    assert stats == {
+        "contexts_changed": 1,
+        "outputs_changed": 2,
+        "merged_contexts": 1,
+        "merged_outputs": 2,
+    }
+    assert chain == {("new",): {"new": 6.0}}
+
+
+def test_replace_string_rewrites_inside_bracket_tokens():
+    from markovsound.lyrics_markov import replace_string
+
+    chain = {("[Verse - Rap]",): {"[Chorus - Rap Vocal]": 1.0}}
+
+    replace_string(chain, "Rap", "Spoken Rap")
+
+    assert chain == {("[Verse - Spoken Rap]",): {"[Chorus - Spoken Rap Vocal]": 1.0}}
