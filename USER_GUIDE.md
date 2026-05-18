@@ -77,11 +77,36 @@ The pytest suite covers pure logic such as live runtime config validation, promp
 | :--- | :--- |
 | `./create` | Starts the main generation loop. |
 | `./play` | Launches the interactive player with `INS`/`DEL` curation. |
+| `./session current` | Shows the active isolated working session. |
+| `./session save NAME --use` | Copies the current state/audio into a named session and activates it. |
 | `PYTHONPATH=src python3 -m markovsound.cli_dedup` | Flattens chains to increase diversity and break repetitions. |
 | `./replace-lyrics OLD NEW` | Rewrites lyric-chain vocabulary. |
 | `./clean-caption-metadata` | Removes legacy metadata suffix paths from the text chain. |
 | `./verwijder <file>` | Manually remove a track and untrain it. |
 | `./keep <file>` | Manually boost a track's influence. |
+
+## Sessions
+
+Sessions let you keep different MarkovSound lives apart: each session has its
+own `state/` and `Audio/`, including chains, runtime config, queue, archive, and
+absorbed material. Internally they live under `sessions/NAME/`; the root
+`state/` and `Audio/` paths become symlinks to the active one so the normal
+commands do not change.
+
+The first activation migrates the old root working directories into
+`sessions/legacy/` and then activates the requested session:
+
+```bash
+./session use legacy        # preserve today's world as the active session
+./session save album-a --use
+./session new blank --use   # empty session; absorb or clone data before create
+./session list
+```
+
+`./create` notices a session switch between cycles and reloads the chains,
+runtime config, and cycle counter for the newly active session. `./play` also
+continues to work through the root symlink; a track already playing is archived
+back into the session it came from.
 
 ## 🎼 Philosophy
 MarkovSound is intended to move away from "pop" and commercial music structures. It aims for the intersection of contemporary composition, free jazz, and algorithmic exploration. The "artefacts" and "glitches" of the process are not bugs—they are the primary material.

@@ -34,6 +34,13 @@ while true; do
         sleep 5
         continue
     fi
+    # Resolve the claimed track into its physical session directory now.  The
+    # root Audio/ symlink may be switched while mpv is playing; archiving must
+    # still go back to the session this track came from.
+    current="$(readlink -f "$current")"
+    session_audio_dir="$(dirname "$(dirname "$current")")"
+    session_archive_dir="$session_audio_dir/archive"
+    mkdir -p "$session_archive_dir"
     name="$(basename "$current")"
     sidecar="${current%.mp3}.json"
     [ -f "$sidecar" ] || { sleep 1; continue; }
@@ -73,7 +80,7 @@ os.replace(tmp, now_playing)
         --term-status-msg='  ${time-pos} / ${duration}  [INS=keep DEL=verwijder]' \
         "$current" || true
     if [ -f "$current" ]; then
-        mv "$current" "$archive_dir/$name"
-        [ -f "$sidecar" ] && mv "$sidecar" "$archive_dir/${name%.mp3}.json"
+        mv "$current" "$session_archive_dir/$name"
+        [ -f "$sidecar" ] && mv "$sidecar" "$session_archive_dir/${name%.mp3}.json"
     fi
 done

@@ -29,6 +29,10 @@ def test_publish_output_moves_staged_pair_into_queue(tmp_path):
     audio = tmp_path / "Audio"
     paths = Paths(
         repo_root=tmp_path,
+        session_name="legacy",
+        session_root=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        current_session_path=tmp_path / ".markovsound_session",
         state_dir=state,
         audio_dir=audio,
         absorb_dir=audio / "absorb",

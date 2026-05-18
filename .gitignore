@@ -9,4 +9,6 @@ __pycache__/
 Audio/
 Music/
 state/
+sessions/
 snapshots/
+.markovsound_session

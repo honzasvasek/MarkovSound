@@ -1,14 +1,24 @@
-"""Filesystem layout and ACE server configuration discovery."""
+"""Filesystem layout, session selection, and ACE server configuration discovery."""
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
+
+
+LEGACY_SESSION = "legacy"
+SESSION_ENV = "MARKOVSOUND_SESSION"
+_SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
 
 @dataclass(frozen=True)
 class Paths:
     repo_root: Path
+    session_name: str
+    session_root: Path
+    sessions_dir: Path
+    current_session_path: Path
     state_dir: Path
     audio_dir: Path
     absorb_dir: Path
@@ -30,11 +40,30 @@ class Paths:
     @classmethod
     def discover(cls) -> "Paths":
         root = Path(__file__).resolve().parents[2]
-        state = root / "state"
-        audio = root / "Audio"
+        session_name = _selected_session(root)
+        sessions_dir = root / "sessions"
+        current_session_path = root / ".markovsound_session"
+        session_root = sessions_dir / session_name
+        if SESSION_ENV in os.environ:
+            # Explicit one-command override: bypass root symlinks.
+            state = session_root / "state"
+            audio = session_root / "Audio"
+        elif (root / "state").is_symlink() or current_session_path.exists():
+            # Normal runtime: root state/Audio point at the active session.
+            state = root / "state"
+            audio = root / "Audio"
+        else:
+            # Compatibility with old checkouts before sessions existed.
+            session_root = root
+            state = root / "state"
+            audio = root / "Audio"
         prompts = root / "prompts"
         return cls(
             repo_root=root,
+            session_name=session_name,
+            session_root=session_root,
+            sessions_dir=sessions_dir,
+            current_session_path=current_session_path,
             state_dir=state,
             audio_dir=audio,
             absorb_dir=audio / "absorb",
@@ -53,6 +82,42 @@ class Paths:
             preset_path=state / "preset.txt",
             runtime_config_path=state / "runtime.json",
         )
+
+
+def is_valid_session_name(name: str) -> bool:
+    return bool(_SESSION_RE.fullmatch(name)) and name not in {".", ".."}
+
+
+def validate_session_name(name: str) -> str:
+    name = name.strip()
+    if not is_valid_session_name(name):
+        raise ValueError(
+            "invalid session name; use letters, numbers, '.', '_' or '-' "
+            "and start with a letter or number"
+        )
+    return name
+
+
+def _selected_session(root: Path) -> str:
+    env_name = os.environ.get(SESSION_ENV, "").strip()
+    if env_name:
+        return validate_session_name(env_name)
+    marker = root / ".markovsound_session"
+    try:
+        marker_name = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        marker_name = ""
+    if marker_name:
+        return validate_session_name(marker_name)
+    legacy_marker = root / "state" / "current_session"
+    if not (root / "state").is_symlink():
+        try:
+            marker_name = legacy_marker.read_text(encoding="utf-8").strip()
+        except OSError:
+            marker_name = ""
+        if marker_name:
+            return validate_session_name(marker_name)
+    return LEGACY_SESSION
 
 
 @dataclass(frozen=True)

@@ -73,6 +73,13 @@ also hot-reloaded between cycles when maintenance tools modify them externally.
 That means commands such as `./replace-lyrics` can be used while `./create` is
 running.
 
+Named sessions isolate complete working worlds under `sessions/NAME/`. The root
+`state/` and `Audio/` paths are symlinks to the active session, selected by
+`.markovsound_session` or a one-command `MARKOVSOUND_SESSION=NAME` override.
+`./session` manages creation, save/clone, activation, rename, and deletion.
+The loop checks for session changes at cycle boundaries and reloads chains,
+config, song carry-over, and cycle count when one occurs.
+
 ## Main modules
 
 | Module | Responsibility |
@@ -120,6 +127,8 @@ PYTHONPATH=src pytest -q
 ./steer "prepared piano drones"
 ./replace-lyrics Losers Dancers --dry-run
 ./clean-caption-metadata --dry-run
+./session current
+./session save experiment-a --use
 python3 scripts/smoke_ace.py
 python3 scripts/smoke_vocals.py
 ```

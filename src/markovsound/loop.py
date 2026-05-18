@@ -130,6 +130,29 @@ def _load_lyrics_chain(paths: Paths) -> tuple[dict, int]:
     return {}, _LYRICS_ORDER
 
 
+def _make_chain_watches(paths: Paths) -> dict[str, ChainWatch]:
+    return {
+        "text": ChainWatch.from_path(paths.chain_path),
+        "codes": ChainWatch.from_path(paths.codes_chain_path),
+        "lyrics": ChainWatch.from_path(paths.lyrics_chain_path),
+    }
+
+
+def _new_song_state(runtime_cfg: RuntimeConfig) -> dict:
+    """Return fresh per-song carryover state for one active session."""
+    return {
+        "caption": None,
+        "duration": 0,
+        "takes_left": 0,
+        "take_no": 0,
+        "cover_strength": runtime_cfg.cover_strength,
+        "last_mp3_path": None,
+        "last_transcribed_lyrics": "",
+        "last_audio_codes": "",
+        "runtime_cfg": runtime_cfg,
+    }
+
+
 def _read_cycle(paths: Paths) -> int:
     try:
         return int(paths.cycle_path.read_text().strip())
@@ -260,17 +283,14 @@ def main(argv: list[str] | None = None) -> int:
 
     paths = Paths.discover()
     ace_cfg = AceConfig.discover()
+    log(f"session: {paths.session_name} ({paths.session_root})")
     log(f"paths: state={paths.state_dir} audio={paths.audio_dir}")
     log(f"ace: {ace_cfg.base_url} models={ace_cfg.models_dir}")
 
     chain, order = _load_or_build_chain(paths, args.order)
     codes_chain, codes_order = _load_codes_chain(paths)
     lyrics_chain, lyrics_order = _load_lyrics_chain(paths)
-    chain_watches = {
-        "text": ChainWatch.from_path(paths.chain_path),
-        "codes": ChainWatch.from_path(paths.codes_chain_path),
-        "lyrics": ChainWatch.from_path(paths.lyrics_chain_path),
-    }
+    chain_watches = _make_chain_watches(paths)
 
     stop_flag = {"requested": False}
 
@@ -300,17 +320,25 @@ def main(argv: list[str] | None = None) -> int:
             runtime_cfg = RuntimeConfig()
             log(f"runtime config invalid at startup; using defaults: {exc}")
         log(f"runtime config: {runtime_cfg}")
-        # Persistent song state — survives across cycles within one ./create
-        # invocation so multiple takes share caption+duration. Cleared
-        # automatically when takes_left hits 0.
-        song_state: dict = {"caption": None, "duration": 0,
-                            "takes_left": 0, "take_no": 0,
-                            "cover_strength": runtime_cfg.cover_strength,
-                            "last_mp3_path": None,
-                            "last_transcribed_lyrics": "",
-                            "last_audio_codes": "",
-                            "runtime_cfg": runtime_cfg}
+        # Persistent song state survives across cycles within one session so
+        # multiple takes share caption+duration. A session switch starts fresh.
+        song_state = _new_song_state(runtime_cfg)
         while True:
+            current_paths = Paths.discover()
+            if current_paths.session_name != paths.session_name:
+                paths = current_paths
+                log(f"session → {paths.session_name} ({paths.session_root})")
+                chain, order = _load_or_build_chain(paths, args.order)
+                codes_chain, codes_order = _load_codes_chain(paths)
+                lyrics_chain, lyrics_order = _load_lyrics_chain(paths)
+                chain_watches = _make_chain_watches(paths)
+                try:
+                    runtime_cfg = load_runtime_config(paths.runtime_config_path)
+                except ValueError as exc:
+                    runtime_cfg = RuntimeConfig()
+                    log(f"runtime config invalid after session switch; using defaults: {exc}")
+                song_state = _new_song_state(runtime_cfg)
+                cycle = _read_cycle(paths)
             cycle += 1
             try:
                 chain, order, codes_chain, codes_order, lyrics_chain, lyrics_order = _reload_changed_chains(

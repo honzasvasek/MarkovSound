@@ -18,6 +18,10 @@ def test_reload_changed_lyrics_chain_picks_up_external_edit(tmp_path):
     audio = tmp_path / "Audio"
     paths = Paths(
         repo_root=tmp_path,
+        session_name="legacy",
+        session_root=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        current_session_path=tmp_path / ".markovsound_session",
         state_dir=state,
         audio_dir=audio,
         absorb_dir=audio / "absorb",
