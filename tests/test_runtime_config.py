@@ -36,6 +36,7 @@ def test_roundtrip_custom_config(tmp_path):
         {"cover_strength": -0.1},
         {"target_buffer_tracks": 0},
         {"latent_splice_seconds": -1},
+        {"form_arc_prob": 1.1},
     ],
 )
 def test_invalid_config_is_rejected(tmp_path, payload):

@@ -11,6 +11,7 @@ from typing import Callable
 from . import ace_client, cli_transcribe, lyricist
 from .codes_markov import format_codes, parse_codes, sample_codes, train_codes
 from .config import AceConfig, Paths
+from .composition import FormArc, choose_form, shape_caption
 from .corpora import append_understood_lyrics, append_used_lyrics
 from .describe import metadata_caption
 from .latent_splice import frame_count, splice_latent_segments
@@ -35,6 +36,8 @@ class SongPlan:
     duration: int
     scaffold: dict[str, object]
     vocal_mode: bool
+    prompt_caption: str
+    form_arc: dict[str, str] | None = None
 
 
 @dataclass
@@ -115,12 +118,38 @@ def plan_song(
     if song_state is not None:
         song_state["take_no"] += 1
         song_state["takes_left"] -= 1
+        take_number = song_state["take_no"]
+    else:
+        take_number = 1
+    if is_new_song:
+        form = choose_form() if random.random() < runtime_cfg.form_arc_prob else None
+        if song_state is not None:
+            song_state["form_arc"] = form.to_dict() if form else None
+    else:
+        form = FormArc.from_dict(song_state.get("form_arc")) if song_state is not None else None
+    prompt_caption = shape_caption(
+        caption,
+        form,
+        take_number=take_number,
+        total_takes=takes_per_song,
+    )
     scaffold = _experimental_metadata()
     vocal_mode = random.random() < runtime_cfg.vocal_prob
     log(f"caption: {caption}")
     log(f"duration {duration}s / {duration / 60:.1f} min")
     log(f"scaffold: {scaffold['bpm']} bpm, {scaffold['keyscale']}, {scaffold['timesignature']}/4")
-    return SongPlan(is_new_song, caption, duration, scaffold, vocal_mode)
+    if form is not None:
+        log(f"form arc: {form.name} (take {take_number}/{takes_per_song})")
+        log(f"prompt caption: {prompt_caption}")
+    return SongPlan(
+        is_new_song=is_new_song,
+        caption=caption,
+        duration=duration,
+        scaffold=scaffold,
+        vocal_mode=vocal_mode,
+        prompt_caption=prompt_caption,
+        form_arc=form.to_dict() if form else None,
+    )
 
 
 def prepare_lyrics(
@@ -133,7 +162,7 @@ def prepare_lyrics(
     log: Callable[[str], None],
 ) -> LyricsPlan:
     request = {
-        "caption": plan.caption,
+        "caption": plan.prompt_caption,
         "duration": plan.duration,
         "bpm": plan.scaffold["bpm"],
         "keyscale": plan.scaffold["keyscale"],
@@ -151,8 +180,8 @@ def prepare_lyrics(
         request["lyrics"] = "[Instrumental]"
         return LyricsPlan(request)
 
-    vocal_caption = _vocalize_caption(plan.caption, vocal_lang)
-    if vocal_caption != plan.caption:
+    vocal_caption = _vocalize_caption(plan.prompt_caption, vocal_lang)
+    if vocal_caption != plan.prompt_caption:
         log(f"caption rewritten for vocal cycle: {vocal_caption[:160]}{'...' if len(vocal_caption) > 160 else ''}")
     request["caption"] = vocal_caption
     request["vocal_language"] = vocal_lang
@@ -289,6 +318,7 @@ def write_output(
                        lyrics_source=result.lyrics_source)
     sidecar = {
         "cycle": cycle, "caption": plan.caption,
+        "prompt_caption": plan.prompt_caption, "form_arc": plan.form_arc,
         "enriched_caption": result.enriched.get("caption"), "scaffold": plan.scaffold,
         "codes_source": result.codes_source, "vocal_mode": plan.vocal_mode,
         "lyrics_source": result.lyrics_source, "created_lyrics": lyrics_plan.created_lyrics,

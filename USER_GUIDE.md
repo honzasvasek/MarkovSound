@@ -50,11 +50,20 @@ The system starts its life from a **corpus** of text. By adding your own descrip
   "takes_per_song": 3,
   "cover_strength": 0.6,
   "target_buffer_tracks": 1,
-  "latent_splice_seconds": 5.0
+  "latent_splice_seconds": 5.0,
+  "form_arc_prob": 0.75
 }
 ```
 
 For example, change `min_duration_minutes` and `max_duration_minutes` to `4` and `6`, save the file, and the next **new song** will use that range. Existing multi-take songs keep their already chosen duration until the next song starts. `target_buffer_tracks` controls how many unplayed tracks `./create` keeps ready in `Audio/queue/` while `./play` consumes the oldest queued item. A tracked template lives at `runtime.example.json`.
+
+`form_arc_prob` is the chance that a new song receives a temporary dramatic
+shape such as accumulation, erosion, rupture, or false return. The same shape
+persists across its related takes, while each take gets a different variation
+instruction. Set it to `0.0` for unshaped Markov captions or `1.0` to shape
+every new song. The original learned caption and the expanded synthesis prompt
+are stored separately in the JSON sidecar, so this authored vocabulary does
+not silently replace the system's own memory.
 
 `--codes-mode` and `--lyrics-mode` are still startup flags because they change generation strategy rather than per-song shape.
 

@@ -17,6 +17,7 @@ class RuntimeConfig:
     cover_strength: float = 0.6
     target_buffer_tracks: int = 1
     latent_splice_seconds: float = 5.0
+    form_arc_prob: float = 0.75
 
     def duration_minutes(self) -> list[int]:
         return list(range(self.min_duration_minutes, self.max_duration_minutes + 1))
@@ -33,6 +34,7 @@ def _coerce(data: dict) -> RuntimeConfig:
         cover_strength=float(data.get("cover_strength", 0.6)),
         target_buffer_tracks=int(data.get("target_buffer_tracks", 1)),
         latent_splice_seconds=float(data.get("latent_splice_seconds", 5.0)),
+        form_arc_prob=float(data.get("form_arc_prob", 0.75)),
     )
     if cfg.min_duration_minutes < 1:
         raise ValueError("min_duration_minutes must be >= 1")
@@ -52,6 +54,8 @@ def _coerce(data: dict) -> RuntimeConfig:
         raise ValueError("target_buffer_tracks must be >= 1")
     if cfg.latent_splice_seconds < 0:
         raise ValueError("latent_splice_seconds must be >= 0")
+    if not 0.0 <= cfg.form_arc_prob <= 1.0:
+        raise ValueError("form_arc_prob must be between 0.0 and 1.0")
     return cfg
 
 

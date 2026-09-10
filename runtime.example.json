@@ -7,5 +7,6 @@
   "takes_per_song": 3,
   "cover_strength": 0.6,
   "target_buffer_tracks": 1,
-  "latent_splice_seconds": 5.0
+  "latent_splice_seconds": 5.0,
+  "form_arc_prob": 0.75
 }

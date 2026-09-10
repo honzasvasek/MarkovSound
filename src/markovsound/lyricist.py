@@ -25,6 +25,8 @@ import subprocess
 import sys
 import time
 
+from .config import Paths
+
 
 LLAMA_CLI = os.environ.get("LLAMA_CLI", "/usr/local/bin/llama-cli")
 MODEL_PATH = os.environ.get(
@@ -79,6 +81,19 @@ You are an avant-garde lyricist channeling Captain Beefheart, Frank Zappa, Sun R
 - First line of output MUST be a `[` bracket tag.
 - Last line of output MUST be either a bracket tag or a lyric line — never prose.\
 """
+
+
+def load_system_prompt(log=print) -> str:
+    """Load the editable lyricist system prompt for the active session."""
+    path = Paths.discover().lyrics_prompt_path
+    try:
+        prompt = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return SYSTEM_PROMPT
+    if not prompt:
+        log(f"lyricist: {path} is empty; using built-in prompt")
+        return SYSTEM_PROMPT
+    return prompt
 
 
 def _format_llama3_prompt(system: str, user: str) -> str:
@@ -174,7 +189,7 @@ def generate_lyrics(
     user_msg = _user_message(
         caption=caption, duration=duration, bpm=bpm, description=description,
     )
-    prompt = _format_llama3_prompt(SYSTEM_PROMPT, user_msg)
+    prompt = _format_llama3_prompt(load_system_prompt(log=log), user_msg)
     # NOTE: do NOT pass --log-disable here — in this llama-cli build it
     # suppresses the generated stdout too, leaving us with zero bytes.
     # Logs and timing prints land on stderr (which we ignore); generated

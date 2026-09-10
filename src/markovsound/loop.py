@@ -149,6 +149,7 @@ def _new_song_state(runtime_cfg: RuntimeConfig) -> dict:
         "last_mp3_path": None,
         "last_transcribed_lyrics": "",
         "last_audio_codes": "",
+        "form_arc": None,
         "runtime_cfg": runtime_cfg,
     }
 

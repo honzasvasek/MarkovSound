@@ -33,6 +33,7 @@ class Paths:
     codes_corpus_path: Path
     lyrics_chain_path: Path
     lyrics_corpus_path: Path
+    lyrics_prompt_path: Path
     used_lyrics_corpus_path: Path
     preset_path: Path
     runtime_config_path: Path
@@ -49,9 +50,11 @@ class Paths:
             state = session_root / "state"
             audio = session_root / "Audio"
         elif (root / "state").is_symlink() or current_session_path.exists():
-            # Normal runtime: root state/Audio point at the active session.
-            state = root / "state"
-            audio = root / "Audio"
+            # Normal runtime: pin this process to the selected session's
+            # physical paths. The root state/Audio symlinks are operator
+            # conveniences and may be switched while create/play is running.
+            state = session_root / "state"
+            audio = session_root / "Audio"
         else:
             # Compatibility with old checkouts before sessions existed.
             session_root = root
@@ -78,6 +81,7 @@ class Paths:
             codes_corpus_path=state / "codes_corpus.txt",
             lyrics_chain_path=state / "lyrics_chain.pkl",
             lyrics_corpus_path=state / "understood_lyrics.txt",
+            lyrics_prompt_path=state / "lyrics_prompt.txt",
             used_lyrics_corpus_path=state / "used_lyrics.txt",
             preset_path=state / "preset.txt",
             runtime_config_path=state / "runtime.json",

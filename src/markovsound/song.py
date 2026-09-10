@@ -70,7 +70,10 @@ def _vocalize_caption(caption: str, lang: str) -> str:
         return lead + "."
     # If the body already declares vocals, don't double up the lead — just
     # ensure we end with a period.
-    if any(w in rewritten.lower() for w in _VOCAL_HINT_WORDS):
+    if any(
+        re.search(rf"\b{re.escape(word)}\b", rewritten, flags=re.IGNORECASE)
+        for word in _VOCAL_HINT_WORDS
+    ):
         return rewritten if rewritten.endswith(".") else rewritten + "."
     # Lowercase the first letter of the body so the concatenation reads as one
     # sentence: "Song with … lead vocals over an explosive jazz piece."
@@ -97,5 +100,4 @@ def _experimental_metadata() -> dict[str, object]:
         "keyscale": random.choice(_KEYSCALE_CHOICES),
         "timesignature": random.choice(_TIMESIG_CHOICES),
     }
-
 

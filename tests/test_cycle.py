@@ -47,6 +47,7 @@ def test_publish_output_moves_staged_pair_into_queue(tmp_path):
         codes_corpus_path=state / "codes_corpus.txt",
         lyrics_chain_path=state / "lyrics_chain.pkl",
         lyrics_corpus_path=state / "understood_lyrics.txt",
+        lyrics_prompt_path=state / "lyrics_prompt.txt",
         used_lyrics_corpus_path=state / "used_lyrics.txt",
         preset_path=state / "preset.txt",
         runtime_config_path=state / "runtime.json",

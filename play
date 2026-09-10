@@ -1,7 +1,7 @@
 #!/bin/bash
-# Play queued tracks in FIFO order. ./create fills Audio/queue/; the current
-# now-playing item is excluded from the buffer count so generation can start
-# composing the next song while this one is heard.
+# Play the newest queued track. ./create fills Audio/queue/; when generation
+# runs freely and builds a backlog, older queued tracks are discarded so
+# playback jumps to the most recent render.
 #
 # Key bindings during playback (via scripts/play_keys.lua):
 #   INS  → ./keep <track>        (boost caption, keep playing)
@@ -24,7 +24,17 @@ cleanup() {
 trap cleanup INT TERM
 
 next_queued() {
-    find "$queue_dir" -maxdepth 1 -type f -name '*.mp3' | sort | head -n 1
+    find "$queue_dir" -maxdepth 1 -type f -name '*.mp3' | sort | tail -n 1
+}
+
+prune_older_queued() {
+    keep="$1"
+    find "$queue_dir" -maxdepth 1 -type f -name '*.mp3' | sort | while IFS= read -r old; do
+        [ "$old" = "$keep" ] && continue
+        old_sidecar="${old%.mp3}.json"
+        echo "discarding stale queued render: $(basename "$old")"
+        rm -f "$old" "$old_sidecar"
+    done
 }
 
 while true; do
@@ -34,6 +44,7 @@ while true; do
         sleep 5
         continue
     fi
+    prune_older_queued "$current"
     # Resolve the claimed track into its physical session directory now.  The
     # root Audio/ symlink may be switched while mpv is playing; archiving must
     # still go back to the session this track came from.

@@ -18,3 +18,9 @@ def test_vocalize_caption_does_not_duplicate_existing_vocal_hint():
     result = _vocalize_caption(caption, "en")
 
     assert result == "Raw female vocals over free jazz texture."
+
+
+def test_vocalize_caption_does_not_mistake_missing_for_singing():
+    result = _vocalize_caption("Replace missing parts with noise", "en")
+
+    assert result.startswith("Song with prominent lead vocals in English over")
